@@ -13,10 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No version here on purpose: action-setup reads the `packageManager`
+      # field in package.json (pnpm@11.7.0), matching local dev. Specifying both
+      # makes action-setup error out.
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node
         uses: actions/setup-node@v4
