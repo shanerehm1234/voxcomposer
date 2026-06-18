@@ -5,7 +5,7 @@ write plugins.
 
 ## Development setup
 
-Requires **Node 20+** and **pnpm 9+** (via `corepack enable`).
+Requires **Node 22+** and **pnpm 9+** (via `corepack enable`).
 
 ```bash
 pnpm install

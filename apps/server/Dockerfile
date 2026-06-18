@@ -1,6 +1,7 @@
 # Vox Composer local backend. Build context is the repo root (needs the pnpm
 # workspace), e.g.:  docker build -f apps/server/Dockerfile -t voxcomposer-server .
-FROM node:20-slim
+# Node 22 — pnpm 11.7 requires >= 22.13 (uses node:sqlite).
+FROM node:22-slim
 
 # ffmpeg for MP3->WAV transcoding; openssl for Prisma engines.
 RUN apt-get update \

@@ -44,7 +44,7 @@ examples/plugins/ WLED + Generic HTTP plugin templates
 
 ## Quick start (developers)
 
-Requires **Node 20+** and **pnpm 9+**.
+Requires **Node 22+** and **pnpm 9+**.
 
 ```bash
 pnpm install
