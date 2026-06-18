@@ -44,7 +44,7 @@ export function DeviceSidebar({
   onSelectDevice,
 }: DeviceSidebarProps) {
   return (
-    <aside className="flex w-60 flex-col border-r border-border/70 bg-bg2/60">
+    <aside className="hidden w-60 flex-col border-r border-border/70 bg-bg2/60 md:flex">
       <div className="min-h-0 flex-1 overflow-y-auto">
         <SectionLabel>Vox-Link Devices</SectionLabel>
         <ul className="space-y-0.5 px-2">

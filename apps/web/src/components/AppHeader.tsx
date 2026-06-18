@@ -64,7 +64,7 @@ export function AppHeader({
               <Icon
                 className={`h-4 w-4 transition-colors ${active ? 'text-purple-l' : 'text-muted group-hover:text-text'}`}
               />
-              {label}
+              <span className="hidden sm:inline">{label}</span>
             </button>
           );
         })}
@@ -78,7 +78,7 @@ export function AppHeader({
             className="flex items-center gap-1.5 rounded-lg border border-purple/40 bg-purple/10 px-2.5 py-1.5 text-[12px] font-medium text-purple-l transition-colors hover:bg-purple/20"
           >
             <IconPlus className="h-3.5 w-3.5" />
-            Install
+            <span className="hidden sm:inline">Install</span>
           </button>
         )}
         <button
@@ -94,7 +94,9 @@ export function AppHeader({
           className="flex items-center gap-2 rounded-lg border border-border/80 bg-bg3/40 px-3 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-text"
         >
           <IconExport className="h-4 w-4" />
-          Export<span className="text-muted/70">.vox</span>
+          <span className="hidden sm:inline">
+            Export<span className="text-muted/70">.vox</span>
+          </span>
         </button>
 
         <div
@@ -106,7 +108,7 @@ export function AppHeader({
             <span className="relative inline-flex h-2 w-2 rounded-full bg-teal" />
           </span>
           <span className="font-semibold text-teal-l">{remotesOnline}</span>
-          <span className="text-muted">online</span>
+          <span className="hidden text-muted sm:inline">online</span>
         </div>
 
         <button
@@ -114,7 +116,7 @@ export function AppHeader({
           className="flex items-center gap-2 rounded-lg bg-gradient-to-b from-purple to-purple-d px-3.5 py-1.5 text-[13px] font-semibold text-white shadow-[0_2px_12px_rgba(83,74,183,0.4)] transition-all hover:shadow-[0_2px_18px_rgba(83,74,183,0.6)] hover:brightness-110"
         >
           <IconPlay className="h-3.5 w-3.5" />
-          Preview live
+          <span className="hidden sm:inline">Preview live</span>
         </button>
       </div>
     </header>

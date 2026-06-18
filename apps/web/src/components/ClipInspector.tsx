@@ -14,7 +14,7 @@ interface ClipInspectorProps {
 
 export function ClipInspector({ clip, show, onChange, selectionCount = 0 }: ClipInspectorProps) {
   return (
-    <aside className="flex w-72 flex-col overflow-y-auto border-l border-border/70 bg-bg2/60">
+    <aside className="hidden w-72 flex-col overflow-y-auto border-l border-border/70 bg-bg2/60 lg:flex">
       <div className="flex items-center gap-2 px-4 pb-2 pt-4">
         <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted/80">
           Clip Inspector
