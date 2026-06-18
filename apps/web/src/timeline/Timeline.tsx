@@ -26,7 +26,7 @@ import {
   snap,
   type DragMode,
 } from './edits.js';
-import { clipAtPoint } from './hitTest.js';
+import { clipAtPoint, clipsInRect } from './hitTest.js';
 import { drawTimeline, trackIndexAtY, type RenderState } from './render.js';
 import { formatTimecode } from './ruler.js';
 import {
@@ -41,8 +41,9 @@ import {
 
 interface TimelineProps {
   show: VoxShow;
-  selectedClipId: string | null;
-  onSelectClip: (clipId: string | null) => void;
+  /** Currently selected clip ids; the last entry is the "primary" selection. */
+  selectedClipIds: string[];
+  onSelectClips: (clipIds: string[]) => void;
   /** Commit a discrete edit (after a drag/resize/delete) to the undo stack. */
   onCommit: (next: VoxShow) => void;
 }
@@ -53,9 +54,14 @@ interface TimelineProps {
  * React state is reserved for things the surrounding chrome reads (the time
  * readout, zoom label), so the component never re-renders at frame rate.
  */
-export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: TimelineProps) {
+export function Timeline({ show, selectedClipIds, onSelectClips, onCommit }: TimelineProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  const selectOne = useCallback(
+    (id: string | null) => onSelectClips(id ? [id] : []),
+    [onSelectClips],
+  );
 
   // Frame-rate state (refs — no re-render).
   const viewportRef = useRef<Viewport>({ pxPerMs: 0.05, scrollMs: 0 });
@@ -76,14 +82,25 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
   // undo stack on every frame. Committed on pointer-up.
   const draftRef = useRef<VoxShow>(show);
 
-  // Active clip drag/resize, if any.
+  // Active clip drag/resize, if any. `origins` holds the starting position of
+  // every clip being dragged (all selected for a move; just the grabbed clip
+  // for a resize), so a group move keeps relative spacing.
   const dragRef = useRef<{
-    clipId: string;
+    primaryId: string;
     mode: DragMode;
     grabMs: number;
-    origStartMs: number;
-    origDurMs: number;
+    origins: { id: string; startMs: number; durationMs: number }[];
     moved: boolean;
+  } | null>(null);
+
+  // Active rubber-band marquee, if any.
+  const marqueeRef = useRef<{
+    startCx: number;
+    startY: number;
+    additive: boolean;
+    base: string[];
+    moved: boolean;
+    rect: { x: number; y: number; w: number; h: number };
   } | null>(null);
 
   // Resync the draft whenever the committed show changes (and we're not mid-drag).
@@ -96,9 +113,9 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
 
   // Keep the canvas selection set in sync with the lifted selection prop.
   useEffect(() => {
-    selectionRef.current = selectedClipId ? new Set([selectedClipId]) : new Set();
+    selectionRef.current = new Set(selectedClipIds);
     dirtyRef.current = true;
-  }, [selectedClipId]);
+  }, [selectedClipIds]);
 
   // Chrome state (low-frequency).
   const [displayMs, setDisplayMs] = useState(0);
@@ -130,6 +147,7 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
       selection: selectionRef.current,
       loop: loopRef.current,
       loopEnabled: loopEnabledRef.current,
+      marquee: marqueeRef.current?.rect ?? null,
     };
     drawTimeline(ctx, state);
   }, []);
@@ -278,33 +296,57 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
       } else {
         const rect = canvasRef.current!.getBoundingClientRect();
         const y = e.clientY - rect.top;
+        const additive = e.shiftKey || e.metaKey || e.ctrlKey;
         const hit = clipAtPoint(draftRef.current, viewportRef.current, cx, y);
         if (hit) {
-          // Select and arm a drag; the playhead stays put.
-          onSelectClip(hit.clipId);
-          const clip = findClip(draftRef.current, hit.clipId);
-          if (clip) {
+          if (additive) {
+            // Toggle this clip in/out of the selection; don't start a drag.
+            const sel = selectionRef.current;
+            const next = sel.has(hit.clipId)
+              ? [...sel].filter((id) => id !== hit.clipId)
+              : [...sel, hit.clipId];
+            onSelectClips(next);
+          } else {
+            // Click a clip: keep an existing multi-selection (so you can drag the
+            // group), otherwise select just this one. Then arm a drag.
+            const inSel = selectionRef.current.has(hit.clipId);
+            if (!inSel) onSelectClips([hit.clipId]);
+            const mode: DragMode = hit.zone === 'body' ? 'move' : hit.zone;
+            const dragIds =
+              mode === 'move' && inSel ? [...selectionRef.current] : [hit.clipId];
+            const origins = dragIds
+              .map((id) => {
+                const c = findClip(draftRef.current, id);
+                return c ? { id, startMs: c.startMs, durationMs: c.durationMs } : null;
+              })
+              .filter((o): o is { id: string; startMs: number; durationMs: number } => o !== null);
             dragRef.current = {
-              clipId: hit.clipId,
-              mode: hit.zone === 'body' ? 'move' : hit.zone,
+              primaryId: hit.clipId,
+              mode,
               grabMs: xToMs(viewportRef.current, cx),
-              origStartMs: clip.startMs,
-              origDurMs: clip.durationMs,
+              origins,
               moved: false,
             };
           }
         } else {
-          onSelectClip(null);
-          scrubbingRef.current = true;
-          playheadRef.current = Math.max(0, xToMs(viewportRef.current, cx));
-          dirtyRef.current = true;
-          setDisplayMs(playheadRef.current);
+          // Empty space: begin a marquee. A click (no movement) clears the
+          // selection and scrubs; a drag rubber-band selects.
+          marqueeRef.current = {
+            startCx: cx,
+            startY: y,
+            additive,
+            base: additive ? [...selectionRef.current] : [],
+            moved: false,
+            rect: { x: LAYOUT.trackHeaderWidth + cx, y, w: 0, h: 0 },
+          };
         }
       }
       (e.target as Element).setPointerCapture?.(e.pointerId);
     },
-    [onSelectClip],
+    [onSelectClips],
   );
+
+  const MOVE_THRESHOLD = 4;
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (panningRef.current) {
@@ -321,13 +363,53 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
     if (drag) {
       const cx = contentXFromEvent(e);
       const deltaMs = xToMs(viewportRef.current, cx) - drag.grabMs;
-      const next = applyDrag(drag.origStartMs, drag.origDurMs, drag.mode, deltaMs, !e.altKey);
-      const clip = findClip(draftRef.current, drag.clipId);
-      if (clip) {
-        draftRef.current = replaceClip(draftRef.current, drag.clipId, { ...clip, ...next });
-        drag.moved = true;
-        dirtyRef.current = true;
+      if (drag.mode === 'move') {
+        // Snap the delta off the primary clip, then shift the whole group by the
+        // same amount so relative spacing is preserved.
+        const primary = drag.origins.find((o) => o.id === drag.primaryId) ?? drag.origins[0];
+        if (primary) {
+          const snapped = applyDrag(primary.startMs, primary.durationMs, 'move', deltaMs, !e.altKey);
+          const effDelta = snapped.startMs - primary.startMs;
+          let next = draftRef.current;
+          for (const o of drag.origins) {
+            const clip = findClip(next, o.id);
+            if (clip) {
+              next = replaceClip(next, o.id, { ...clip, startMs: Math.max(0, o.startMs + effDelta) });
+            }
+          }
+          draftRef.current = next;
+        }
+      } else {
+        const o = drag.origins[0];
+        const clip = o && findClip(draftRef.current, o.id);
+        if (o && clip) {
+          const upd = applyDrag(o.startMs, o.durationMs, drag.mode, deltaMs, !e.altKey);
+          draftRef.current = replaceClip(draftRef.current, o.id, { ...clip, ...upd });
+        }
       }
+      drag.moved = true;
+      dirtyRef.current = true;
+      return;
+    }
+
+    const mq = marqueeRef.current;
+    if (mq) {
+      const cx = contentXFromEvent(e);
+      const y = e.clientY - canvasRef.current!.getBoundingClientRect().top;
+      if (!mq.moved && Math.abs(cx - mq.startCx) < MOVE_THRESHOLD && Math.abs(y - mq.startY) < MOVE_THRESHOLD) {
+        return; // not yet a drag
+      }
+      mq.moved = true;
+      mq.rect = { x: LAYOUT.trackHeaderWidth + mq.startCx, y: mq.startY, w: cx - mq.startCx, h: y - mq.startY };
+      // Live preview: highlight intersected clips (render only — no React churn).
+      const inside = clipsInRect(draftRef.current, viewportRef.current, {
+        x: mq.startCx,
+        y: mq.startY,
+        w: cx - mq.startCx,
+        h: y - mq.startY,
+      });
+      selectionRef.current = new Set(mq.additive ? [...mq.base, ...inside] : inside);
+      dirtyRef.current = true;
       return;
     }
 
@@ -366,9 +448,25 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
       if (drag.moved) onCommit(draftRef.current);
       dragRef.current = null;
     }
+
+    const mq = marqueeRef.current;
+    if (mq) {
+      marqueeRef.current = null;
+      if (mq.moved) {
+        // Commit the marquee selection to React state.
+        onSelectClips([...selectionRef.current]);
+      } else {
+        // A plain click on empty space: clear selection and scrub there.
+        onSelectClips([]);
+        playheadRef.current = Math.max(0, xToMs(viewportRef.current, mq.startCx));
+        setDisplayMs(playheadRef.current);
+      }
+      dirtyRef.current = true;
+    }
+
     scrubbingRef.current = false;
     panningRef.current = null;
-  }, [onCommit]);
+  }, [onCommit, onSelectClips]);
 
   // --- Wheel: pan horizontally; Ctrl/Cmd = zoom at cursor -------------------
   const onWheel = useCallback((e: React.WheelEvent) => {
@@ -428,7 +526,7 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
         const next = addClip(show, target.id, clip);
         draftRef.current = next;
         onCommit(next);
-        onSelectClip(clipId);
+        selectOne(clipId);
         dirtyRef.current = true;
       } catch (err) {
         console.error('Audio import failed:', err);
@@ -436,7 +534,7 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
         setImporting(false);
       }
     },
-    [show, onCommit, onSelectClip],
+    [show, onCommit, selectOne],
   );
 
   const onDragOver = useCallback((e: React.DragEvent) => {
@@ -466,8 +564,8 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
     [importAudioFile],
   );
 
-  // --- Duplicate / copy / paste --------------------------------------------
-  const clipboardRef = useRef<VoxClip | null>(null);
+  // --- Duplicate / copy / paste (operate on the whole selection) -----------
+  const clipboardRef = useRef<VoxClip[]>([]);
 
   /** Carry an audio clip's decoded asset + persisted blob to a new clip id. */
   const carryAudio = useCallback((fromId: string, toId: string) => {
@@ -476,47 +574,76 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
   }, []);
 
   const duplicateSelected = useCallback(() => {
-    if (!selectedClipId) return;
-    const trackId = findTrackIdOfClip(draftRef.current, selectedClipId);
-    const clip = findClip(draftRef.current, selectedClipId);
-    if (!trackId || !clip) return;
-    const at = snap(clip.startMs + clip.durationMs, true);
-    const { show: next, clip: copy } = pasteClip(draftRef.current, trackId, clip, at);
-    carryAudio(clip.id, copy.id);
+    const ids = [...selectionRef.current];
+    if (ids.length === 0) return;
+    let next = draftRef.current;
+    const newIds: string[] = [];
+    for (const id of ids) {
+      const trackId = findTrackIdOfClip(next, id);
+      const clip = findClip(next, id);
+      if (!trackId || !clip) continue;
+      const at = snap(clip.startMs + clip.durationMs, true);
+      const res = pasteClip(next, trackId, clip, at);
+      carryAudio(clip.id, res.clip.id);
+      next = res.show;
+      newIds.push(res.clip.id);
+    }
+    if (newIds.length === 0) return;
     draftRef.current = next;
     onCommit(next);
-    onSelectClip(copy.id);
-  }, [selectedClipId, onCommit, onSelectClip, carryAudio]);
+    onSelectClips(newIds);
+  }, [onCommit, onSelectClips, carryAudio]);
 
   const copySelected = useCallback(() => {
-    if (!selectedClipId) return;
-    const clip = findClip(draftRef.current, selectedClipId);
-    if (clip) clipboardRef.current = clip;
-  }, [selectedClipId]);
+    const ids = [...selectionRef.current];
+    clipboardRef.current = ids
+      .map((id) => findClip(draftRef.current, id))
+      .filter((c): c is VoxClip => c !== null);
+  }, []);
 
   const pasteClipboard = useCallback(() => {
-    const clip = clipboardRef.current;
-    if (!clip) return;
-    const trackId =
-      findTrackIdOfClip(draftRef.current, clip.id) ??
-      (selectedClipId && findTrackIdOfClip(draftRef.current, selectedClipId)) ??
-      draftRef.current.tracks.find((t) => t.type === clip.type)?.id ??
-      draftRef.current.tracks[0]?.id;
-    if (!trackId) return;
-    const at = snap(playheadRef.current, true);
-    const { show: next, clip: copy } = pasteClip(draftRef.current, trackId, clip, at);
-    carryAudio(clip.id, copy.id);
+    const clips = clipboardRef.current;
+    if (clips.length === 0) return;
+    // Preserve relative timing: anchor the earliest clip at the playhead.
+    const minStart = Math.min(...clips.map((c) => c.startMs));
+    const base = snap(playheadRef.current, true);
+    let next = draftRef.current;
+    const newIds: string[] = [];
+    for (const clip of clips) {
+      const trackId =
+        findTrackIdOfClip(next, clip.id) ??
+        next.tracks.find((t) => t.type === clip.type)?.id ??
+        next.tracks[0]?.id;
+      if (!trackId) continue;
+      const res = pasteClip(next, trackId, clip, base + (clip.startMs - minStart));
+      carryAudio(clip.id, res.clip.id);
+      next = res.show;
+      newIds.push(res.clip.id);
+    }
+    if (newIds.length === 0) return;
     draftRef.current = next;
     onCommit(next);
-    onSelectClip(copy.id);
-  }, [selectedClipId, onCommit, onSelectClip, carryAudio]);
+    onSelectClips(newIds);
+  }, [onCommit, onSelectClips, carryAudio]);
 
   const deleteSelected = useCallback(() => {
-    if (!selectedClipId) return;
-    draftRef.current = removeClip(draftRef.current, selectedClipId);
-    onCommit(draftRef.current);
-    onSelectClip(null);
-  }, [selectedClipId, onCommit, onSelectClip]);
+    const ids = [...selectionRef.current];
+    if (ids.length === 0) return;
+    let next = draftRef.current;
+    for (const id of ids) next = removeClip(next, id);
+    draftRef.current = next;
+    onCommit(next);
+    onSelectClips([]);
+  }, [onCommit, onSelectClips]);
+
+  /** Select every clip on the track that holds the primary selection. */
+  const selectTrackClips = useCallback(() => {
+    const anchor = selectionRef.current.values().next().value as string | undefined;
+    const trackId = anchor ? findTrackIdOfClip(draftRef.current, anchor) : null;
+    const track = trackId ? draftRef.current.tracks.find((t) => t.id === trackId) : null;
+    const target = track ?? draftRef.current.tracks.find((t) => t.clips.length > 0);
+    if (target) onSelectClips(target.clips.map((c) => c.id));
+  }, [onSelectClips]);
 
   // --- Right-click context menu --------------------------------------------
   const [menu, setMenu] = useState<{ x: number; y: number; hasClip: boolean } | null>(null);
@@ -529,11 +656,13 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
       if (cx < 0) return;
       e.preventDefault();
       const hit = clipAtPoint(draftRef.current, viewportRef.current, cx, y);
-      if (hit) onSelectClip(hit.clipId);
+      // Right-clicking a clip that isn't selected selects just it; keep an
+      // existing multi-selection so context actions apply to the whole group.
+      if (hit && !selectionRef.current.has(hit.clipId)) selectOne(hit.clipId);
       const wrapRect = wrapRef.current!.getBoundingClientRect();
       setMenu({ x: e.clientX - wrapRect.left, y: e.clientY - wrapRect.top, hasClip: Boolean(hit) });
     },
-    [onSelectClip],
+    [selectOne],
   );
 
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -581,6 +710,9 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
           copySelected();
         } else if (k === 'v') {
           pasteClipboard();
+        } else if (k === 'a') {
+          e.preventDefault();
+          selectTrackClips();
         }
         return;
       }
@@ -596,7 +728,7 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
           break;
         case 'Delete':
         case 'Backspace':
-          if (selectedClipId) {
+          if (selectionRef.current.size > 0) {
             e.preventDefault();
             deleteSelected();
           }
@@ -657,13 +789,11 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
     stepBy,
     markDirty,
     show.duration,
-    selectedClipId,
-    onCommit,
-    onSelectClip,
     duplicateSelected,
     copySelected,
     pasteClipboard,
     deleteSelected,
+    selectTrackClips,
     setLoopIn,
     setLoopOut,
     toggleLoop,
@@ -731,8 +861,8 @@ export function Timeline({ show, selectedClipId, onSelectClip, onCommit }: Timel
         </div>
 
         <span className="ml-auto hidden text-[11px] text-muted/80 2xl:block">
-          <Kbd>Space</Kbd> play · <Kbd>I/O/L</Kbd> loop · <Kbd>⌘D</Kbd> dup · <Kbd>⌘Z</Kbd> undo ·{' '}
-          <Kbd>Ctrl</Kbd>+wheel zoom
+          <Kbd>Space</Kbd> play · <Kbd>I/O/L</Kbd> loop · <Kbd>⇧</Kbd>/drag multi-select ·{' '}
+          <Kbd>⌘A</Kbd> track · <Kbd>⌘D</Kbd> dup · <Kbd>⌘Z</Kbd> undo
         </span>
       </div>
       <div

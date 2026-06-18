@@ -20,6 +20,8 @@ export interface RenderState {
   loop?: { inMs: number; outMs: number } | null;
   /** Whether loop playback is armed (affects loop region styling). */
   loopEnabled?: boolean;
+  /** Active rubber-band selection rect, in absolute canvas px. */
+  marquee?: { x: number; y: number; w: number; h: number } | null;
 }
 
 /** Y (top) of a track lane, in CSS px, by row index. */
@@ -71,6 +73,34 @@ export function drawTimeline(ctx: CanvasRenderingContext2D, s: RenderState): voi
 
   // --- Playhead, drawn last so it sits above everything. ---
   drawPlayhead(ctx, s, contentX, contentWidth, height);
+
+  // --- Rubber-band marquee, above all. ---
+  if (s.marquee) drawMarquee(ctx, s.marquee, contentX, contentWidth, height);
+}
+
+function drawMarquee(
+  ctx: CanvasRenderingContext2D,
+  m: { x: number; y: number; w: number; h: number },
+  contentX: number,
+  contentWidth: number,
+  height: number,
+) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(contentX, LAYOUT.rulerHeight, contentWidth, height - LAYOUT.rulerHeight);
+  ctx.clip();
+  const x = m.w < 0 ? m.x + m.w : m.x;
+  const y = m.h < 0 ? m.y + m.h : m.y;
+  const w = Math.abs(m.w);
+  const h = Math.abs(m.h);
+  ctx.fillStyle = hexToRgba(PALETTE.purpleL, 0.12);
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = hexToRgba(PALETTE.purpleL, 0.8);
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.setLineDash([]);
+  ctx.restore();
 }
 
 function drawLaneBackgrounds(ctx: CanvasRenderingContext2D, count: number, contentWidth: number) {

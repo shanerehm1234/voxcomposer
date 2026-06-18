@@ -45,3 +45,34 @@ export function clipAtPoint(
   }
   return null;
 }
+
+/**
+ * Ids of every clip whose body rect intersects a marquee rect. The rect is
+ * given in the same coordinate space as {@link clipAtPoint}: `x` in content px
+ * (header excluded), `y` canvas-relative. Normalises negative w/h.
+ */
+export function clipsInRect(
+  show: VoxShow,
+  vp: Viewport,
+  rect: { x: number; y: number; w: number; h: number },
+): string[] {
+  const rx = rect.w < 0 ? rect.x + rect.w : rect.x;
+  const ry = rect.h < 0 ? rect.y + rect.h : rect.y;
+  const rw = Math.abs(rect.w);
+  const rh = Math.abs(rect.h);
+  const ids: string[] = [];
+  for (let row = 0; row < show.tracks.length; row++) {
+    const top = trackTop(row);
+    const clipY = top + 6;
+    const clipH = LAYOUT.trackHeight - 12;
+    // Vertical overlap with this lane?
+    if (ry + rh < clipY || ry > clipY + clipH) continue;
+    for (const clip of show.tracks[row]!.clips) {
+      const x = msToX(vp, clip.startMs);
+      const w = Math.max(2, msToPx(vp, clip.durationMs));
+      if (x + w < rx || x > rx + rw) continue; // horizontal overlap
+      ids.push(clip.id);
+    }
+  }
+  return ids;
+}

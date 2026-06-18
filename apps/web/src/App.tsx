@@ -36,12 +36,14 @@ export function App() {
       window.history.replaceState(null, '', `#${activeView}`);
     }
   }, [activeView]);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>('c-skelly1-intro');
+  const [selectedClipIds, setSelectedClipIds] = useState<string[]>(['c-skelly1-intro']);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>('SK:01');
 
+  // The primary (last) selection drives the inspector.
+  const primaryClipId = selectedClipIds[selectedClipIds.length - 1] ?? null;
   const selectedClip = useMemo(
-    () => (selectedClipId ? findClip(show, selectedClipId) : null),
-    [show, selectedClipId],
+    () => (primaryClipId ? findClip(show, primaryClipId) : null),
+    [show, primaryClipId],
   );
 
   const remotesOnline = demo.devices.filter((d) => d.connection === 'online').length;
@@ -71,7 +73,7 @@ export function App() {
       try {
         const result = await readShowFile(file);
         commit(result.show);
-        setSelectedClipId(null);
+        setSelectedClipIds([]);
         showToast(
           result.migrated
             ? `Imported — updated v${result.fromVersion} → v${result.toVersion}`
@@ -116,7 +118,7 @@ export function App() {
       );
       if (cancelled) return;
       set(saved);
-      setSelectedClipId(null);
+      setSelectedClipIds([]);
       showToast('Restored your last session', 'info');
     })();
     return () => {
@@ -193,8 +195,8 @@ export function App() {
           {activeView === 'timeline' && (
             <Timeline
               show={show}
-              selectedClipId={selectedClipId}
-              onSelectClip={setSelectedClipId}
+              selectedClipIds={selectedClipIds}
+              onSelectClips={setSelectedClipIds}
               onCommit={commit}
             />
           )}
@@ -205,7 +207,12 @@ export function App() {
           )}
         </main>
         {activeView === 'timeline' && (
-          <ClipInspector clip={selectedClip} show={show} onChange={editClip} />
+          <ClipInspector
+            clip={selectedClip}
+            show={show}
+            onChange={editClip}
+            selectionCount={selectedClipIds.length}
+          />
         )}
       </div>
       <Toast toast={toast} onDismiss={() => setToast(null)} />

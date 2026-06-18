@@ -8,9 +8,11 @@ interface ClipInspectorProps {
   show: VoxShow;
   /** Commit an edited clip to the undo stack. */
   onChange: (next: VoxClip) => void;
+  /** How many clips are selected (the inspector edits the primary one). */
+  selectionCount?: number;
 }
 
-export function ClipInspector({ clip, show, onChange }: ClipInspectorProps) {
+export function ClipInspector({ clip, show, onChange, selectionCount = 0 }: ClipInspectorProps) {
   return (
     <aside className="flex w-72 flex-col overflow-y-auto border-l border-border/70 bg-bg2/60">
       <div className="flex items-center gap-2 px-4 pb-2 pt-4">
@@ -30,7 +32,14 @@ export function ClipInspector({ clip, show, onChange }: ClipInspectorProps) {
         )}
       </div>
       {clip ? (
-        <ClipFields key={clip.id} clip={clip} show={show} onChange={onChange} />
+        <>
+          {selectionCount > 1 && (
+            <div className="mx-4 mb-2 rounded-lg border border-purple/30 bg-purple/10 px-3 py-2 text-[12px] text-purple-l">
+              {selectionCount} clips selected · editing primary
+            </div>
+          )}
+          <ClipFields key={clip.id} clip={clip} show={show} onChange={onChange} />
+        </>
       ) : (
         <EmptyState />
       )}
