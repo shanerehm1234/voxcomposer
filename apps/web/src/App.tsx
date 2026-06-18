@@ -221,7 +221,23 @@ export function App() {
   }, [undo, redo, handleExport]);
 
   return (
-    <div className="flex h-screen flex-col bg-bg text-text">
+    <div
+      className="flex h-screen flex-col bg-bg text-text"
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        // Importing a show file anywhere in the app. Audio drops are handled by
+        // the timeline canvas; here we only catch .vox / .zip packages.
+        const file = Array.from(e.dataTransfer.files).find(
+          (f) => isShowPackage(f) || f.name.toLowerCase().endsWith('.vox'),
+        );
+        if (file) {
+          e.preventDefault();
+          void handleImportFile(file);
+        }
+      }}
+    >
       <AppHeader
         remotesOnline={remotesOnline}
         activeView={activeView}
