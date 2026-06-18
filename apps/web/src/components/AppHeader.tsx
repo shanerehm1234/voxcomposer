@@ -15,6 +15,7 @@ interface AppHeaderProps {
   onSelectView: (view: string) => void;
   onExport: () => void;
   onImport: () => void;
+  onShowHelp: () => void;
   onInstall?: () => void;
 }
 
@@ -32,6 +33,7 @@ export function AppHeader({
   onExport,
   onImport,
   onInstall,
+  onShowHelp,
 }: AppHeaderProps) {
   return (
     <header className="relative flex items-center gap-4 border-b border-border/70 bg-bg2/80 px-4 py-2.5 backdrop-blur">
@@ -55,6 +57,8 @@ export function AppHeader({
             <button
               key={id}
               onClick={() => onSelectView(id)}
+              aria-label={label}
+              aria-current={active ? 'page' : undefined}
               className={`group flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
                 active
                   ? 'bg-bg3 text-text shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ring-1 ring-purple/30'
@@ -84,6 +88,7 @@ export function AppHeader({
         <button
           onClick={onImport}
           title="Open a .vox show file"
+          aria-label="Open a .vox show file"
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/80 bg-bg3/40 text-muted transition-colors hover:text-text"
         >
           <IconFolderOpen className="h-4 w-4" />
@@ -91,6 +96,7 @@ export function AppHeader({
         <button
           onClick={onExport}
           title="Download this show as a .vox file"
+          aria-label="Export .vox file"
           className="flex items-center gap-2 rounded-lg border border-border/80 bg-bg3/40 px-3 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-text"
         >
           <IconExport className="h-4 w-4" />
@@ -101,6 +107,8 @@ export function AppHeader({
 
         <div
           title="Remotes currently reachable over Vox-Link"
+          role="status"
+          aria-label={`${remotesOnline} remotes online`}
           className="flex items-center gap-2 rounded-lg border border-teal/25 bg-teal/10 px-3 py-1.5 text-[13px]"
         >
           <span className="relative flex h-2 w-2">
@@ -112,7 +120,17 @@ export function AppHeader({
         </div>
 
         <button
+          onClick={onShowHelp}
+          title="Keyboard shortcuts (?)"
+          aria-label="Keyboard shortcuts"
+          className="hidden h-8 w-8 items-center justify-center rounded-lg border border-border/80 bg-bg3/40 font-mono text-[13px] text-muted transition-colors hover:text-text sm:flex"
+        >
+          ?
+        </button>
+
+        <button
           title="Stream this show live to the remotes over Vox-Link"
+          aria-label="Preview live"
           className="flex items-center gap-2 rounded-lg bg-gradient-to-b from-purple to-purple-d px-3.5 py-1.5 text-[13px] font-semibold text-white shadow-[0_2px_12px_rgba(83,74,183,0.4)] transition-all hover:shadow-[0_2px_18px_rgba(83,74,183,0.6)] hover:brightness-110"
         >
           <IconPlay className="h-3.5 w-3.5" />

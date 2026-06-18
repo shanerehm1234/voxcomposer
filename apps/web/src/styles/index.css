@@ -62,6 +62,18 @@
   ::selection {
     background: rgba(175, 169, 236, 0.28);
   }
+
+  /* Visible keyboard focus for everything interactive, without affecting
+     mouse users (focus-visible only). */
+  :focus-visible {
+    outline: 2px solid #afa9ec;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  /* The canvas manages its own focus affordances. */
+  canvas:focus-visible {
+    outline: none;
+  }
 }
 
 @layer components {

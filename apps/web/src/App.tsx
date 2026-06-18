@@ -6,6 +6,7 @@ import { DeviceSidebar } from './components/DeviceSidebar.js';
 import { DevicesView } from './components/DevicesView.js';
 import { MediaView } from './components/MediaView.js';
 import { SettingsView } from './components/SettingsView.js';
+import { ShortcutsOverlay } from './components/ShortcutsOverlay.js';
 import { Toast, type ToastMessage } from './components/Toast.js';
 import { makeDemoState } from './demo/demoData.js';
 import { findClip, replaceClip } from './timeline/edits.js';
@@ -53,6 +54,21 @@ export function App() {
     (next: VoxClip) => commit(replaceClip(show, next.id, next)),
     [commit, show],
   );
+
+  // --- Keyboard help overlay ('?') -----------------------------------------
+  const [showHelp, setShowHelp] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowHelp((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // --- Toasts ---------------------------------------------------------------
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -171,6 +187,7 @@ export function App() {
         onExport={handleExport}
         onImport={() => fileInputRef.current?.click()}
         onInstall={canInstall ? promptInstall : undefined}
+        onShowHelp={() => setShowHelp(true)}
       />
       <input
         ref={fileInputRef}
@@ -216,6 +233,7 @@ export function App() {
         )}
       </div>
       <Toast toast={toast} onDismiss={() => setToast(null)} />
+      <ShortcutsOverlay open={showHelp} onClose={() => setShowHelp(false)} />
     </div>
   );
 }

@@ -827,6 +827,9 @@ export function Timeline({ show, selectedClipIds, onSelectClips, onCommit }: Tim
         <div className="relative">
           <button
             onClick={() => setAddOpen((o) => !o)}
+            aria-label="Add a track"
+            aria-haspopup="menu"
+            aria-expanded={addOpen}
             className="flex items-center gap-1.5 rounded-lg border border-border/70 bg-bg3/40 px-2.5 py-1.5 text-[12px] font-medium text-muted transition-colors hover:text-text"
           >
             <span className="text-purple-l">＋</span> Track
@@ -874,6 +877,9 @@ export function Timeline({ show, selectedClipIds, onSelectClips, onCommit }: Tim
       >
         <canvas
           ref={canvasRef}
+          role="application"
+          aria-label="Show timeline editor — drag clips, scrub the playhead, and use keyboard shortcuts"
+          tabIndex={0}
           className="block touch-none select-none"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -939,6 +945,7 @@ function TransportButton({
   return (
     <button
       title={title}
+      aria-label={title}
       onClick={onClick}
       className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 ${
         accent

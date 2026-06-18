@@ -23,7 +23,11 @@ export function Toast({ toast, onDismiss }: { toast: ToastMessage | null; onDism
         : 'border-purple/40 text-purple-l';
 
   return (
-    <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2">
+    <div
+      className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2"
+      role="status"
+      aria-live="polite"
+    >
       <div
         className={`vox-toast pointer-events-auto flex items-center gap-2.5 rounded-xl border bg-bg2/95 px-4 py-2.5 text-[13px] font-medium shadow-2xl backdrop-blur ${tone}`}
       >

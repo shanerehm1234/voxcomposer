@@ -165,6 +165,7 @@ function ClipFields({
               type="range"
               min={0}
               max={100}
+              aria-label="Volume"
               value={Math.round(Number(data.volume ?? 1) * 100)}
               onChange={(e) => patchData({ volume: Number(e.target.value) / 100 })}
               onPointerUp={() => commit()}
