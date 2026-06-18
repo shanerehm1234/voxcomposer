@@ -645,6 +645,31 @@ export function Timeline({ show, selectedClipIds, onSelectClips, onCommit }: Tim
     if (target) onSelectClips(target.clips.map((c) => c.id));
   }, [onSelectClips]);
 
+  // --- Double-click an empty lane to create a clip -------------------------
+  const onDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      const rect = canvasRef.current!.getBoundingClientRect();
+      const cx = e.clientX - rect.left - LAYOUT.trackHeaderWidth;
+      const y = e.clientY - rect.top;
+      if (cx < 0) return;
+      const idx = trackIndexAtY(y, draftRef.current.tracks.length);
+      const track = idx >= 0 ? draftRef.current.tracks[idx] : undefined;
+      // Audio clips come from dropping a file; everything else is created here.
+      if (!track || track.type === 'audio') return;
+      if (clipAtPoint(draftRef.current, viewportRef.current, cx, y)) return; // not on a clip
+
+      const startMs = Math.max(0, snap(xToMs(viewportRef.current, cx), true));
+      const { durationMs, data } = defaultClipFor(track.type);
+      const clip: VoxClip = { id: newClipId(), startMs, durationMs, type: track.type, data };
+      const next = addClip(draftRef.current, track.id, clip);
+      draftRef.current = next;
+      onCommit(next);
+      selectOne(clip.id);
+      dirtyRef.current = true;
+    },
+    [onCommit, selectOne],
+  );
+
   // --- Right-click context menu --------------------------------------------
   const [menu, setMenu] = useState<{ x: number; y: number; hasClip: boolean } | null>(null);
 
@@ -885,6 +910,7 @@ export function Timeline({ show, selectedClipIds, onSelectClips, onCommit }: Tim
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onDoubleClick={onDoubleClick}
           onWheel={onWheel}
           onContextMenu={onContextMenu}
         />
@@ -956,6 +982,32 @@ function TransportButton({
       {children}
     </button>
   );
+}
+
+/** Default duration + payload for a newly double-click-created clip. */
+function defaultClipFor(type: string): { durationMs: number; data: Record<string, unknown> } {
+  switch (type) {
+    case 'dmx':
+      return { durationMs: 2000, data: { universe: 0, channel: 1, value: 255, fadeMs: 0 } };
+    case 'relay':
+      return { durationMs: 500, data: { channel: 0, action: 'pulse', durationMs: 500 } };
+    case 'servo':
+    case 'neck':
+      return {
+        durationMs: 1000,
+        data: {
+          axis: 'default',
+          keyframes: [
+            { timeMs: 0, value: 0 },
+            { timeMs: 1000, value: 1 },
+          ],
+        },
+      };
+    default:
+      // Plugin track types (wled/http/udp/…): empty payload; the plugin's
+      // inspector + summary guide the user to fill it in.
+      return { durationMs: 2000, data: {} };
+  }
 }
 
 function Kbd({ children }: { children: React.ReactNode }) {

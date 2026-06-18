@@ -143,12 +143,14 @@ function drawClips(ctx: CanvasRenderingContext2D, s: RenderState) {
     const colors = trackColor(track.type);
     const accent = plugin?.color ?? colors.accent;
 
-    // Gentle hint on empty audio lanes (approachable onboarding).
-    if (track.clips.length === 0 && track.type === 'audio') {
+    // Gentle hint on empty lanes (approachable onboarding).
+    if (track.clips.length === 0) {
       ctx.fillStyle = 'rgba(113, 128, 150, 0.45)';
       ctx.font = 'italic 12px Inter, system-ui, sans-serif';
       ctx.textBaseline = 'middle';
-      ctx.fillText('Drop an audio file here…', 12, top + LAYOUT.trackHeight / 2);
+      const hint =
+        track.type === 'audio' ? 'Drop an audio file here…' : 'Double-click to add a clip…';
+      ctx.fillText(hint, 12, top + LAYOUT.trackHeight / 2);
     }
 
     for (const clip of track.clips) {
