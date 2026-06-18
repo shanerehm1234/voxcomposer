@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1f2e"/>
+      <stop offset="1" stop-color="#0F1117"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#AFA9EC"/>
+      <stop offset="1" stop-color="#534AB7"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- stylized waveform mark -->
+  <g fill="url(#mark)">
+    <rect x="120" y="216" width="26" height="80" rx="13"/>
+    <rect x="166" y="176" width="26" height="160" rx="13"/>
+    <rect x="212" y="136" width="26" height="240" rx="13"/>
+    <rect x="258" y="186" width="26" height="140" rx="13"/>
+    <rect x="304" y="156" width="26" height="200" rx="13"/>
+    <rect x="350" y="206" width="26" height="100" rx="13"/>
+  </g>
+  <circle cx="256" cy="256" r="3" fill="none"/>
+</svg>

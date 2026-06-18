@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-bg text-text font-body antialiased;
+    margin: 0;
+    overflow: hidden;
+    /* Atmospheric depth: a faint cool glow up top, settling into the base. */
+    background-color: #0f1117;
+    background-image:
+      radial-gradient(1200px 600px at 18% -10%, rgba(83, 74, 183, 0.1), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(29, 158, 117, 0.05), transparent 55%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display;
+  }
+
+  /* Refined, unobtrusive scrollbars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2d3748 transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #232a38;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: #34405680;
+    background-clip: content-box;
+  }
+
+  ::selection {
+    background: rgba(175, 169, 236, 0.28);
+  }
+}
+
+@layer components {
+  /* Hairline top-lit border used on raised surfaces. */
+  .ring-hairline {
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
+      0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  }
+
+  .vox-toast {
+    animation: vox-toast-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  .vox-menu {
+    animation: vox-menu-in 0.12s ease-out;
+    transform-origin: top left;
+  }
+  @keyframes vox-menu-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes vox-toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* Branded range slider used in the inspector. */
+  .vox-range {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  .vox-range::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 999px;
+    background: #0f1117;
+    border: 1px solid #2d3748;
+  }
+  .vox-range::-moz-range-track {
+    height: 6px;
+    border-radius: 999px;
+    background: #0f1117;
+    border: 1px solid #2d3748;
+  }
+  .vox-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: -5px;
+    height: 15px;
+    width: 15px;
+    border-radius: 999px;
+    background: #afa9ec;
+    box-shadow: 0 0 8px rgba(175, 169, 236, 0.6);
+  }
+  .vox-range::-moz-range-thumb {
+    height: 15px;
+    width: 15px;
+    border: none;
+    border-radius: 999px;
+    background: #afa9ec;
+    box-shadow: 0 0 8px rgba(175, 169, 236, 0.6);
+  }
+}
