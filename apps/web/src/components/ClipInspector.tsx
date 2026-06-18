@@ -3,6 +3,10 @@ import { useEffect, useState } from 'react';
 import { pluginRegistry } from '../plugins/registry.js';
 import { trackColor } from '../styles/palette.js';
 
+/** Neck-motion presets the skull board understands per axis / for speed. */
+const AXIS_MODES = ['fixed', 'wander', 'track', 'sweep', 'nod'];
+const SPEED_MODES = ['slow', 'talk', 'talk+', 'fast'];
+
 interface ClipInspectorProps {
   clip: VoxClip | null;
   show: VoxShow;
@@ -254,10 +258,30 @@ function ClipFields({
         <>
           <SectionDivider>Neck Motion</SectionDivider>
           <div className="grid grid-cols-2 gap-2">
-            <ReadField label="Pan" value={neck.pan ?? '—'} />
-            <ReadField label="Tilt" value={neck.tilt ?? '—'} />
-            <ReadField label="Roll" value={neck.roll ?? '—'} />
-            <ReadField label="Speed" value={neck.speed ?? '—'} accent />
+            <SelectField
+              label="Pan"
+              value={neck.pan ?? 'fixed'}
+              options={AXIS_MODES}
+              onChange={(v) => commitData({ neck: { ...neck, pan: v } })}
+            />
+            <SelectField
+              label="Tilt"
+              value={neck.tilt ?? 'fixed'}
+              options={AXIS_MODES}
+              onChange={(v) => commitData({ neck: { ...neck, tilt: v } })}
+            />
+            <SelectField
+              label="Roll"
+              value={neck.roll ?? 'fixed'}
+              options={AXIS_MODES}
+              onChange={(v) => commitData({ neck: { ...neck, roll: v } })}
+            />
+            <SelectField
+              label="Speed"
+              value={neck.speed ?? 'talk'}
+              options={SPEED_MODES}
+              onChange={(v) => commitData({ neck: { ...neck, speed: v } })}
+            />
           </div>
         </>
       )}
@@ -351,17 +375,31 @@ function NumberField({
   );
 }
 
-function ReadField({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
   return (
     <div>
       <FieldLabel>{label}</FieldLabel>
-      <div
-        className={`rounded-lg border border-border/80 bg-bg/40 px-3 py-2 text-[13px] ${
-          accent ? 'text-purple-l' : 'text-text'
-        }`}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 text-[13px] capitalize text-text focus:border-purple/50 focus:outline-none"
       >
-        {value}
-      </div>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
