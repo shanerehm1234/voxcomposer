@@ -18,6 +18,9 @@ build/
 .vscode/*
 !.vscode/extensions.json
 
+# claude code — keep shared project settings, ignore local overrides
+.claude/settings.local.json
+
 # logs
 *.log
 npm-debug.log*

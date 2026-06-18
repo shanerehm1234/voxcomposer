@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git ls-remote *)",
+      "Bash(git commit -q -m 'Add Claude Code project settings; ignore local overrides *)"
+    ]
+  }
+}
