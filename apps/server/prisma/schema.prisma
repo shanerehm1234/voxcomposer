@@ -1,0 +1,21 @@
+// Single-user, self-hosted store. SQLite keeps it to a single file — no DB
+// container to run. Swap `provider`/`url` to Postgres when multi-user + Clerk
+// land; the app code only touches Prisma, so the change is contained here.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id        String   @id @default(uuid())
+  name      String
+  /// The full .vox show document, stored as human-readable JSON text.
+  vox       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -31,3 +31,9 @@ coverage/
 
 # pwa generated
 apps/web/dev-dist/
+
+# server: local sqlite db + transcode cache
+*.db
+*.db-journal
+.cache/
+apps/server/prisma/*.db

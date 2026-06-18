@@ -1,0 +1,33 @@
+# Vox Composer self-hosted backend.
+#
+# The web app is a static SPA — serve apps/web/dist/ with your existing web
+# server (nginx, etc.). This compose runs only the local backend: project
+# storage (SQLite), audio transcoding (ffmpeg), and the live-preview relay.
+#
+#   docker compose up -d --build
+#
+# Then point the editor at  http://<this-host>:8080  in Settings.
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    image: voxcomposer-server
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    environment:
+      # SQLite DB + transcode cache live on the persistent volume below.
+      DATABASE_URL: file:/data/vox.db
+      VOX_CACHE_DIR: /data/cache
+      PORT: '8080'
+      # Lock this down to your editor's origin in production.
+      CORS_ORIGIN: '*'
+      # Optional: point at a real Vox Master once its interface is wired.
+      # VOX_MASTER_URL: http://192.168.4.1
+    volumes:
+      - voxdata:/data
+
+volumes:
+  voxdata:
