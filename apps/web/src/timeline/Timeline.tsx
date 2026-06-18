@@ -22,12 +22,14 @@ import {
   newClipId,
   pasteClip,
   removeClip,
+  removeTrack,
   replaceClip,
+  setTrackLabel,
   snap,
   type DragMode,
 } from './edits.js';
 import { clipAtPoint, clipsInRect } from './hitTest.js';
-import { drawTimeline, trackIndexAtY, type RenderState } from './render.js';
+import { drawTimeline, trackIndexAtY, trackTop, type RenderState } from './render.js';
 import { formatTimecode } from './ruler.js';
 import {
   fitToWidth,
@@ -671,26 +673,65 @@ export function Timeline({ show, selectedClipIds, onSelectClips, onCommit }: Tim
   );
 
   // --- Right-click context menu --------------------------------------------
-  const [menu, setMenu] = useState<{ x: number; y: number; hasClip: boolean } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    kind: 'clip' | 'empty' | 'track';
+    trackId?: string;
+  } | null>(null);
+  const [renaming, setRenaming] = useState<{ trackId: string; label: string } | null>(null);
 
   const onContextMenu = useCallback(
     (e: React.MouseEvent) => {
       const rect = canvasRef.current!.getBoundingClientRect();
-      const cx = e.clientX - rect.left - LAYOUT.trackHeaderWidth;
+      const xInCanvas = e.clientX - rect.left;
+      const cx = xInCanvas - LAYOUT.trackHeaderWidth;
       const y = e.clientY - rect.top;
-      if (cx < 0) return;
       e.preventDefault();
+      const wrapRect = wrapRef.current!.getBoundingClientRect();
+      const mx = e.clientX - wrapRect.left;
+      const my = e.clientY - wrapRect.top;
+
+      // Right-click in the track header column → a track menu.
+      if (cx < 0 && y >= LAYOUT.rulerHeight) {
+        const idx = trackIndexAtY(y, draftRef.current.tracks.length);
+        const track = idx >= 0 ? draftRef.current.tracks[idx] : undefined;
+        if (track) setMenu({ x: mx, y: my, kind: 'track', trackId: track.id });
+        return;
+      }
+      if (cx < 0) return;
+
       const hit = clipAtPoint(draftRef.current, viewportRef.current, cx, y);
       // Right-clicking a clip that isn't selected selects just it; keep an
       // existing multi-selection so context actions apply to the whole group.
       if (hit && !selectionRef.current.has(hit.clipId)) selectOne(hit.clipId);
-      const wrapRect = wrapRef.current!.getBoundingClientRect();
-      setMenu({ x: e.clientX - wrapRect.left, y: e.clientY - wrapRect.top, hasClip: Boolean(hit) });
+      setMenu({ x: mx, y: my, kind: hit ? 'clip' : 'empty' });
     },
     [selectOne],
   );
 
   const closeMenu = useCallback(() => setMenu(null), []);
+
+  const deleteTrack = useCallback(
+    (trackId: string) => {
+      const next = removeTrack(draftRef.current, trackId);
+      draftRef.current = next;
+      onCommit(next);
+      onSelectClips([]);
+    },
+    [onCommit, onSelectClips],
+  );
+
+  const commitRename = useCallback(() => {
+    setRenaming((r) => {
+      if (r && r.label.trim()) {
+        const next = setTrackLabel(draftRef.current, r.trackId, r.label.trim());
+        draftRef.current = next;
+        onCommit(next);
+      }
+      return null;
+    });
+  }, [onCommit]);
 
   // --- Add track ------------------------------------------------------------
   const addTrack = useCallback(
@@ -922,20 +963,62 @@ export function Timeline({ show, selectedClipIds, onSelectClips, onCommit }: Tim
               className="vox-menu absolute z-30 min-w-[170px] overflow-hidden rounded-xl border border-border/80 bg-bg2/95 py-1 shadow-2xl backdrop-blur"
               style={{ left: menu.x, top: menu.y }}
             >
-              {menu.hasClip ? (
+              {menu.kind === 'track' ? (
+                <>
+                  <MenuItem
+                    label="Rename track"
+                    onClick={() => {
+                      const t = draftRef.current.tracks.find((tr) => tr.id === menu.trackId);
+                      if (t) setRenaming({ trackId: t.id, label: t.label });
+                      closeMenu();
+                    }}
+                  />
+                  <div className="my-1 h-px bg-border/60" />
+                  <MenuItem
+                    label="Delete track"
+                    danger
+                    onClick={() => {
+                      if (menu.trackId) deleteTrack(menu.trackId);
+                      closeMenu();
+                    }}
+                  />
+                </>
+              ) : menu.kind === 'clip' ? (
                 <>
                   <MenuItem label="Duplicate" hint="⌘D" onClick={() => { duplicateSelected(); closeMenu(); }} />
                   <MenuItem label="Copy" hint="⌘C" onClick={() => { copySelected(); closeMenu(); }} />
-                  <MenuItem label="Paste" hint="⌘V" disabled={!clipboardRef.current} onClick={() => { pasteClipboard(); closeMenu(); }} />
+                  <MenuItem label="Paste" hint="⌘V" disabled={clipboardRef.current.length === 0} onClick={() => { pasteClipboard(); closeMenu(); }} />
                   <div className="my-1 h-px bg-border/60" />
                   <MenuItem label="Delete" hint="⌫" danger onClick={() => { deleteSelected(); closeMenu(); }} />
                 </>
               ) : (
-                <MenuItem label="Paste" hint="⌘V" disabled={!clipboardRef.current} onClick={() => { pasteClipboard(); closeMenu(); }} />
+                <MenuItem label="Paste" hint="⌘V" disabled={clipboardRef.current.length === 0} onClick={() => { pasteClipboard(); closeMenu(); }} />
               )}
             </div>
           </>
         )}
+
+        {renaming &&
+          (() => {
+            const row = draftRef.current.tracks.findIndex((t) => t.id === renaming.trackId);
+            if (row < 0) return null;
+            return (
+              <input
+                autoFocus
+                value={renaming.label}
+                onChange={(e) =>
+                  setRenaming((r) => (r ? { ...r, label: e.target.value } : r))
+                }
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitRename();
+                  if (e.key === 'Escape') setRenaming(null);
+                }}
+                className="absolute z-40 rounded-md border border-purple/60 bg-bg2 px-2 py-1 text-[13px] font-medium text-text shadow-xl focus:outline-none"
+                style={{ left: 8, top: trackTop(row) + LAYOUT.trackHeight / 2 - 14, width: LAYOUT.trackHeaderWidth - 16 }}
+              />
+            );
+          })()}
 
         {dropActive && (
           <div className="pointer-events-none absolute inset-0 z-10 m-2 flex items-center justify-center rounded-xl border-2 border-dashed border-purple-l/70 bg-purple/10 backdrop-blur-[1px]">

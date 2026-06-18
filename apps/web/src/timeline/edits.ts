@@ -45,6 +45,24 @@ export function removeClip(show: VoxShow, clipId: string): VoxShow {
   };
 }
 
+/** Return a new show with a track (and all its clips) removed. */
+export function removeTrack(show: VoxShow, trackId: string): VoxShow {
+  return {
+    ...show,
+    modified: new Date().toISOString(),
+    tracks: show.tracks.filter((t) => t.id !== trackId),
+  };
+}
+
+/** Return a new show with a track's label changed. */
+export function setTrackLabel(show: VoxShow, trackId: string, label: string): VoxShow {
+  return {
+    ...show,
+    modified: new Date().toISOString(),
+    tracks: show.tracks.map((t) => (t.id === trackId ? { ...t, label } : t)),
+  };
+}
+
 export function findClip(show: VoxShow, clipId: string): VoxClip | null {
   for (const track of show.tracks) {
     const found = track.clips.find((c) => c.id === clipId);

@@ -61,11 +61,20 @@ Done: scaffold · shared types · timeline canvas · full app shell · clip sele
 delete/undo · editable clip inspector · real audio import (drag-drop) + waveform + local preview
 playback · `.vox` export/import (+ migration via loadShow) · IndexedDB persistence (show + audio
 blobs, autosave, restore, reset) · PWA (manifest + Workbox SW, installable/offline) · Devices +
-Media + Settings tabs (hash-routed) · duplicate/copy/paste clips + context menu + shortcuts.
+Media + Settings tabs (hash-routed) · duplicate/copy/paste clips + context menu + shortcuts ·
+marquee + shift-click multi-select (group move) · double-click empty lane to create dmx/relay/
+servo/plugin clips · editable neck-motion presets · track rename/delete (right-click header) ·
+plugin system: `@voxcomposer/plugin-sdk` + in-app host (registry, permission-gated API) + built-in
+WLED/Generic-HTTP/Generic-UDP, surfaced in Settings + rendered on the timeline + custom inspectors ·
+MP3/OGG/M4A import (decode in-browser) with `sourceFormat`/`sourceHash` + device `supportsFormats`/
+`audioSpec` + format badges (server WAV transcode still TODO) · mobile-responsive chrome · a11y pass
+(focus-visible, ARIA) + "?" shortcuts overlay · open-source docs (README/LICENSE/CONTRIBUTING) + CI.
 Demo data in `apps/web/src/demo/demoData.ts`. Audio assets cached in `apps/web/src/audio/registry.ts`
-(module singleton, keyed by clip id) + persisted in `apps/web/src/storage/db.ts`.
-Next: backend/S3/auth → plugin SDK + WLED → live preview (Socket.io) → file sync → remaining track
-types (DMX/relay/servo editors exist; add device/track creation) → rubber-band multiselect → polish.
+(module singleton, keyed by clip id) + persisted in `apps/web/src/storage/db.ts`. Plugin host in
+`apps/web/src/plugins/`. Git: github.com/shanerehm1234/voxcomposer (SSH origin); deploy via
+`scripts/deploy-demo.sh`.
+Next: backend/S3/auth → live preview (Socket.io) → file sync + server-side ffmpeg WAV transcode →
+servo keyframe editor → device/track creation UI in Devices tab → polish.
 
 Media stays OFF the server (Shane's call, to avoid bandwidth bills): audio lives in the browser
 (IndexedDB/object URLs) + on the local network (Master → SD cards). Server only ever stores the
