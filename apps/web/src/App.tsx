@@ -16,7 +16,7 @@ import { decodeAudioFile } from './audio/analyze.js';
 import { registerAsset } from './audio/registry.js';
 import { useInstallPrompt } from './pwa/useInstallPrompt.js';
 import { clearAll, loadAllAudio, loadShowFromDb, saveShow } from './storage/db.js';
-import { downloadShow, readShowFile } from './vox/voxFile.js';
+import { downloadShow, downloadShowPackage, readShowFile } from './vox/voxFile.js';
 
 const VIEWS = ['timeline', 'devices', 'media', 'settings'];
 
@@ -82,6 +82,12 @@ export function App() {
   const handleExport = useCallback(() => {
     downloadShow(show);
     showToast(`Exported “${show.name}”`, 'success');
+  }, [show, showToast]);
+
+  const handleExportPackage = useCallback(async () => {
+    showToast('Packaging show + audio…', 'info');
+    const count = await downloadShowPackage(show);
+    showToast(`Packaged ${show.name} + ${count} audio file${count === 1 ? '' : 's'}`, 'success');
   }, [show, showToast]);
 
   const handleImportFile = useCallback(
@@ -185,6 +191,7 @@ export function App() {
         activeView={activeView}
         onSelectView={setActiveView}
         onExport={handleExport}
+        onExportPackage={() => void handleExportPackage()}
         onImport={() => fileInputRef.current?.click()}
         onInstall={canInstall ? promptInstall : undefined}
         onShowHelp={() => setShowHelp(true)}

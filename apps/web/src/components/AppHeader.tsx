@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   IconDevices,
   IconExport,
@@ -14,6 +15,7 @@ interface AppHeaderProps {
   activeView: string;
   onSelectView: (view: string) => void;
   onExport: () => void;
+  onExportPackage: () => void;
   onImport: () => void;
   onShowHelp: () => void;
   onInstall?: () => void;
@@ -31,10 +33,12 @@ export function AppHeader({
   activeView,
   onSelectView,
   onExport,
+  onExportPackage,
   onImport,
   onInstall,
   onShowHelp,
 }: AppHeaderProps) {
+  const [exportOpen, setExportOpen] = useState(false);
   return (
     <header className="relative flex items-center gap-4 border-b border-border/70 bg-bg2/80 px-4 py-2.5 backdrop-blur">
       {/* Brand */}
@@ -93,17 +97,44 @@ export function AppHeader({
         >
           <IconFolderOpen className="h-4 w-4" />
         </button>
-        <button
-          onClick={onExport}
-          title="Download this show as a .vox file"
-          aria-label="Export .vox file"
-          className="flex items-center gap-2 rounded-lg border border-border/80 bg-bg3/40 px-3 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-text"
-        >
-          <IconExport className="h-4 w-4" />
-          <span className="hidden sm:inline">
-            Export<span className="text-muted/70">.vox</span>
-          </span>
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setExportOpen((o) => !o)}
+            title="Export this show"
+            aria-label="Export"
+            aria-haspopup="menu"
+            aria-expanded={exportOpen}
+            className="flex items-center gap-2 rounded-lg border border-border/80 bg-bg3/40 px-3 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-text"
+          >
+            <IconExport className="h-4 w-4" />
+            <span className="hidden sm:inline">
+              Export<span className="text-muted/70">.vox</span>
+            </span>
+          </button>
+          {exportOpen && (
+            <>
+              <div className="fixed inset-0 z-20" onPointerDown={() => setExportOpen(false)} />
+              <div className="vox-menu absolute right-0 top-full z-30 mt-1 min-w-[220px] overflow-hidden rounded-xl border border-border/80 bg-bg2/95 py-1 shadow-2xl backdrop-blur">
+                <ExportItem
+                  title=".vox file"
+                  desc="Just the show (small JSON)"
+                  onClick={() => {
+                    onExport();
+                    setExportOpen(false);
+                  }}
+                />
+                <ExportItem
+                  title="Show package (.zip)"
+                  desc="Show + all audio files"
+                  onClick={() => {
+                    onExportPackage();
+                    setExportOpen(false);
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </div>
 
         <div
           title="Remotes currently reachable over Vox-Link"
@@ -138,5 +169,25 @@ export function AppHeader({
         </button>
       </div>
     </header>
+  );
+}
+
+function ExportItem({
+  title,
+  desc,
+  onClick,
+}: {
+  title: string;
+  desc: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left transition-colors hover:bg-purple/15"
+    >
+      <span className="text-[13px] font-medium text-text">{title}</span>
+      <span className="text-[11px] text-muted">{desc}</span>
+    </button>
   );
 }
