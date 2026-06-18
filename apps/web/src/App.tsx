@@ -15,8 +15,14 @@ import { Timeline } from './timeline/Timeline.js';
 import { decodeAudioFile } from './audio/analyze.js';
 import { registerAsset } from './audio/registry.js';
 import { useInstallPrompt } from './pwa/useInstallPrompt.js';
-import { clearAll, loadAllAudio, loadShowFromDb, saveShow } from './storage/db.js';
-import { downloadShow, downloadShowPackage, readShowFile } from './vox/voxFile.js';
+import { clearAll, loadAllAudio, loadShowFromDb, saveAudioBlob, saveShow } from './storage/db.js';
+import {
+  downloadShow,
+  downloadShowPackage,
+  isShowPackage,
+  readShowFile,
+  readShowPackage,
+} from './vox/voxFile.js';
 
 const VIEWS = ['timeline', 'devices', 'media', 'settings'];
 
@@ -93,6 +99,36 @@ export function App() {
   const handleImportFile = useCallback(
     async (file: File) => {
       try {
+        if (isShowPackage(file)) {
+          const pkg = await readShowPackage(file);
+          // Decode + register each bundled audio file against its clip(s).
+          const byName = new Map(pkg.audio.map((a) => [a.filename, a.blob]));
+          for (const track of pkg.result.show.tracks) {
+            if (track.type !== 'audio') continue;
+            for (const clip of track.clips) {
+              const fn = (clip.data as Record<string, unknown>).filename;
+              const blob = typeof fn === 'string' ? byName.get(fn) : undefined;
+              if (!blob || typeof fn !== 'string') continue;
+              try {
+                const decoded = await decodeAudioFile(new File([blob], fn));
+                registerAsset(clip.id, decoded, fn, blob);
+                void saveAudioBlob(clip.id, fn, blob);
+              } catch {
+                /* skip undecodable asset */
+              }
+            }
+          }
+          commit(pkg.result.show);
+          setSelectedClipIds([]);
+          showToast(
+            `Imported package — ${pkg.result.show.name} + ${pkg.audio.length} audio file${
+              pkg.audio.length === 1 ? '' : 's'
+            }`,
+            'success',
+          );
+          return;
+        }
+
         const result = await readShowFile(file);
         commit(result.show);
         setSelectedClipIds([]);
@@ -103,7 +139,7 @@ export function App() {
           'success',
         );
       } catch (err) {
-        showToast(err instanceof Error ? err.message : 'Could not read .vox file', 'error');
+        showToast(err instanceof Error ? err.message : 'Could not read file', 'error');
       }
     },
     [commit, showToast],
@@ -199,7 +235,7 @@ export function App() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".vox,application/json"
+        accept=".vox,application/json,.zip,application/zip"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

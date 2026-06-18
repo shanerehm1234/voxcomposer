@@ -1,6 +1,6 @@
 import { loadShow, type MigrationResult, type VoxShow } from '@voxcomposer/shared';
 import { getAsset } from '../audio/registry.js';
-import { createZip, type ZipEntry } from './zip.js';
+import { createZip, readZip, type ZipEntry } from './zip.js';
 
 /** Serialize a show to pretty-printed, human-readable .vox JSON. */
 export function serializeShow(show: VoxShow): string {
@@ -68,6 +68,45 @@ export async function readShowFile(file: File): Promise<MigrationResult> {
     throw new Error(`${file.name} is not valid JSON.`);
   }
   return loadShow(parsed);
+}
+
+export interface ShowPackage {
+  result: MigrationResult;
+  /** Audio files bundled alongside the show, keyed by filename. */
+  audio: { filename: string; blob: Blob }[];
+}
+
+/**
+ * Read a show package `.zip` (as written by {@link downloadShowPackage}): the
+ * `.vox` JSON plus its `audio/` files. Validates + migrates the show via
+ * {@link loadShow}. Throws on a malformed archive or missing show.
+ */
+export async function readShowPackage(file: File): Promise<ShowPackage> {
+  const entries = await readZip(file);
+  const voxEntry = entries.find((e) => e.name.toLowerCase().endsWith('.vox'));
+  if (!voxEntry) throw new Error('No .vox show found in package.');
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(voxEntry.data));
+  } catch {
+    throw new Error('The package contains an invalid .vox file.');
+  }
+  const result = loadShow(parsed);
+
+  const audio = entries
+    .filter((e) => e.name.startsWith('audio/') && !e.name.endsWith('/'))
+    .map((e) => ({
+      filename: e.name.slice('audio/'.length),
+      blob: new Blob([e.data as BlobPart]),
+    }));
+
+  return { result, audio };
+}
+
+/** True if a file looks like a show package (zip) rather than a bare .vox. */
+export function isShowPackage(file: File): boolean {
+  return file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
 }
 
 function safeName(name: string): string {

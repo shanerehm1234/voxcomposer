@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createZip, crc32 } from '../zip.js';
+import { createZip, crc32, readZip } from '../zip.js';
 
 const enc = new TextEncoder();
 
@@ -45,5 +45,20 @@ describe('createZip', () => {
     expect(seen.map((s) => s.name)).toEqual(['show.vox', 'audio/a.wav']);
     expect(seen[0]!.crc).toBe(crc32(files[0]!.data));
     expect(seen[1]!.crc).toBe(crc32(files[1]!.data));
+  });
+
+  it('round-trips through readZip with identical names and bytes', async () => {
+    const files = [
+      { name: 'haunt.vox', data: enc.encode('{"name":"Haunt","x":42}') },
+      { name: 'audio/intro.wav', data: new Uint8Array([9, 8, 7, 6, 5, 4, 3, 2, 1, 0]) },
+    ];
+    const out = await readZip(createZip(files));
+    expect(out.map((e) => e.name)).toEqual(['haunt.vox', 'audio/intro.wav']);
+    expect(new TextDecoder().decode(out[0]!.data)).toBe('{"name":"Haunt","x":42}');
+    expect([...out[1]!.data]).toEqual([9, 8, 7, 6, 5, 4, 3, 2, 1, 0]);
+  });
+
+  it('rejects a non-zip blob', async () => {
+    await expect(readZip(new Blob([new Uint8Array([1, 2, 3])]))).rejects.toThrow(/ZIP/);
   });
 });

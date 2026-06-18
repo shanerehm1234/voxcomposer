@@ -100,3 +100,48 @@ export function createZip(entries: ZipEntry[]): Blob {
 
   return new Blob([...chunks, ...central, eocd] as BlobPart[], { type: 'application/zip' });
 }
+
+/**
+ * Read a store-only ZIP archive into its entries. Only the uncompressed (store)
+ * method is supported — which is all {@link createZip} produces. Throws on a
+ * compressed or malformed archive.
+ */
+export async function readZip(blob: Blob): Promise<ZipEntry[]> {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  const dv = new DataView(buf.buffer);
+
+  // Find the End Of Central Directory record, scanning back from the end.
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= 0; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error('Not a ZIP archive.');
+
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true); // central directory offset
+  const entries: ZipEntry[] = [];
+
+  for (let i = 0; i < count; i++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('Corrupt ZIP central directory.');
+    const method = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const commentLen = dv.getUint16(p + 32, true);
+    const localOffset = dv.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(buf.subarray(p + 46, p + 46 + nameLen));
+    if (method !== 0) throw new Error(`Unsupported ZIP compression in "${name}".`);
+
+    // Read the local header to locate the file data.
+    const localNameLen = dv.getUint16(localOffset + 26, true);
+    const localExtraLen = dv.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLen + localExtraLen;
+    entries.push({ name, data: buf.slice(dataStart, dataStart + compSize) });
+
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}

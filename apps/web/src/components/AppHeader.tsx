@@ -91,8 +91,8 @@ export function AppHeader({
         )}
         <button
           onClick={onImport}
-          title="Open a .vox show file"
-          aria-label="Open a .vox show file"
+          title="Open a .vox show or .zip package"
+          aria-label="Open a .vox show or .zip package"
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/80 bg-bg3/40 text-muted transition-colors hover:text-text"
         >
           <IconFolderOpen className="h-4 w-4" />
