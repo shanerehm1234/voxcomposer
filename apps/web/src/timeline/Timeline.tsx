@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { startPlayback, stopPlayback } from '../audio/engine.js';
 import { isAcceptedAudio } from '../audio/format.js';
 import { buildAudioClip } from '../audio/import.js';
-import { copyAsset } from '../audio/registry.js';
+import { copyAsset, getAsset } from '../audio/registry.js';
 import { trackColor } from '../styles/palette.js';
 import { saveAudioBlob } from '../storage/db.js';
 import {
@@ -300,12 +300,18 @@ export function Timeline({
     (e: React.PointerEvent) => {
       const cx = contentXFromEvent(e);
       if (cx < 0) return; // inside the header column
+      const rect = canvasRef.current!.getBoundingClientRect();
+      const y = e.clientY - rect.top;
       if (e.button === 1 || e.altKey) {
         // Middle/Alt-drag = pan.
         panningRef.current = { x: e.clientX, scrollMs: viewportRef.current.scrollMs };
+      } else if (y < LAYOUT.rulerHeight) {
+        // Click/drag the ruler to move the playhead (play starts from here).
+        scrubbingRef.current = true;
+        playheadRef.current = Math.max(0, xToMs(viewportRef.current, cx));
+        setDisplayMs(playheadRef.current);
+        dirtyRef.current = true;
       } else {
-        const rect = canvasRef.current!.getBoundingClientRect();
-        const y = e.clientY - rect.top;
         const additive = e.shiftKey || e.metaKey || e.ctrlKey;
         const hit = clipAtPoint(draftRef.current, viewportRef.current, cx, y);
         if (hit) {
@@ -394,6 +400,19 @@ export function Timeline({
         const clip = o && findClip(draftRef.current, o.id);
         if (o && clip) {
           const upd = applyDrag(o.startMs, o.durationMs, drag.mode, deltaMs, !e.altKey);
+          // Audio clips can't be stretched past their real length (no time-stretch
+          // yet) — cap the duration at the decoded asset's length.
+          const assetMs = getAsset(o.id)?.durationMs;
+          if (clip.type === 'audio' && assetMs && upd.durationMs > assetMs) {
+            if (drag.mode === 'resize-end') {
+              upd.durationMs = assetMs;
+            } else {
+              // resize-start: keep the right edge fixed, clamp the left edge.
+              const rightEdge = o.startMs + o.durationMs;
+              upd.startMs = Math.max(0, rightEdge - assetMs);
+              upd.durationMs = rightEdge - upd.startMs;
+            }
+          }
           draftRef.current = replaceClip(draftRef.current, o.id, { ...clip, ...upd });
         }
       }
@@ -864,7 +883,7 @@ export function Timeline({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-border/70 bg-bg2/60 px-4 py-2 backdrop-blur">
+      <div className="relative z-30 flex items-center gap-3 border-b border-border/70 bg-bg2/60 px-4 py-2 backdrop-blur">
         <div className="flex items-center gap-1 rounded-xl border border-border/70 bg-bg/40 p-1">
           <TransportButton title="Return to start (K)" onClick={stop}>
             <IconSkipStart className="h-4 w-4" />

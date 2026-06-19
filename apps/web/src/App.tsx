@@ -179,14 +179,28 @@ export function App() {
       if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) e.preventDefault();
     };
     const onDrop = (e: DragEvent) => {
-      const file = Array.from(e.dataTransfer?.files ?? []).find((f) =>
-        isShowFile(f.name.toLowerCase()),
-      );
-      if (!file) return; // audio drops are handled by the timeline canvas
-      e.preventDefault();
-      const name = file.name;
-      // Read the bytes NOW, while the dropped file reference is still valid.
-      void file.arrayBuffer().then((b) => handleImportBytes(b, name));
+      const files = Array.from(e.dataTransfer?.files ?? []);
+      const file = files.find((f) => isShowFile(f.name.toLowerCase()));
+      if (file) {
+        e.preventDefault();
+        const name = file.name;
+        // Read the bytes NOW, while the dropped file reference is still valid.
+        void file
+          .arrayBuffer()
+          .then((b) => handleImportBytes(b, name))
+          .catch(() =>
+            showToast('Couldn’t read the dropped file — use the Open button instead.', 'error'),
+          );
+        return;
+      }
+      // Some Linux file managers drop a URI instead of a readable File. Audio
+      // drops are handled by the timeline canvas; if nothing readable arrived,
+      // point the user at the reliable Open button.
+      const types = Array.from(e.dataTransfer?.types ?? []);
+      if (files.length === 0 && (types.includes('Files') || types.includes('text/uri-list'))) {
+        e.preventDefault();
+        showToast('Drag-drop didn’t provide the file — use the Open button (folder icon).', 'info');
+      }
     };
     window.addEventListener('dragover', onDragOver);
     window.addEventListener('drop', onDrop);
@@ -194,7 +208,7 @@ export function App() {
       window.removeEventListener('dragover', onDragOver);
       window.removeEventListener('drop', onDrop);
     };
-  }, [handleImportBytes]);
+  }, [handleImportBytes, showToast]);
 
   // --- Persistence: restore on mount, autosave on change --------------------
   useEffect(() => {
