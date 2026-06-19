@@ -96,7 +96,7 @@ build jaw-envelope/RMS analysis here; `jawSync`/"FFT auto" is just a flag tellin
 are MP3). The browser decodes all of them via `decodeAudioData` for the waveform/preview; the
 original is stored as-is, never re-encoded client-side. The Ocular Vox boards can't decode MP3 in
 real time, so at **sync time** the server transcodes to WAV per the target `VoxDevice.audioSpec`
-(e.g. 22.05 kHz / 16-bit / mono) using **ffmpeg**, caching output in S3 keyed by
+(e.g. 44.1 kHz / 16-bit / stereo) using **ffmpeg**, caching output in S3 keyed by
 `sourceHash + targetSpec` (clip carries `sourceFormat` + `sourceHash`). `VoxDevice.supportsFormats`
 (default `['wav']`) gates conversion — a future firmware reporting `['wav','mp3']` skips it
 (non-breaking). Conversion is server-side only (not built yet); client pieces (accept/decode,

@@ -149,11 +149,11 @@ export function makeDemoState(): DemoState {
     show,
     devices: [
       // prettier-ignore
-      { id: 'SK:01', name: 'Skelly 1', type: 'skull', connection: 'online', rssi: -52, apiVersion: '1.0.0', firmware: 'vox-skull 2.4.1', battery: 88, sdUsedMb: 2.1, sdTotalMb: 32, fileCount: 3, supportsFormats: ['wav'], audioSpec: { sampleRate: 22050, bitDepth: 16, channels: 1 } },
+      { id: 'SK:01', name: 'Skelly 1', type: 'skull', connection: 'online', rssi: -52, apiVersion: '1.0.0', firmware: 'vox-skull 2.4.1', battery: 88, sdUsedMb: 2.1, sdTotalMb: 32, fileCount: 3, supportsFormats: ['wav'], audioSpec: { sampleRate: 44100, bitDepth: 16, channels: 2 } },
       // prettier-ignore
-      { id: 'SK:02', name: 'Skelly 2', type: 'skull', connection: 'online', rssi: -58, apiVersion: '1.0.0', firmware: 'vox-skull 2.4.1', battery: 64, sdUsedMb: 1.4, sdTotalMb: 32, fileCount: 2, supportsFormats: ['wav'], audioSpec: { sampleRate: 22050, bitDepth: 16, channels: 1 } },
+      { id: 'SK:02', name: 'Skelly 2', type: 'skull', connection: 'online', rssi: -58, apiVersion: '1.0.0', firmware: 'vox-skull 2.4.1', battery: 64, sdUsedMb: 1.4, sdTotalMb: 32, fileCount: 2, supportsFormats: ['wav'], audioSpec: { sampleRate: 44100, bitDepth: 16, channels: 2 } },
       // prettier-ignore
-      { id: 'SK:03', name: 'Skelly 3', type: 'skull', connection: 'online', rssi: -61, apiVersion: '1.0.0', firmware: 'vox-skull 2.4.0', battery: 41, sdUsedMb: 3.0, sdTotalMb: 32, fileCount: 4, supportsFormats: ['wav'], audioSpec: { sampleRate: 22050, bitDepth: 16, channels: 1 } },
+      { id: 'SK:03', name: 'Skelly 3', type: 'skull', connection: 'online', rssi: -61, apiVersion: '1.0.0', firmware: 'vox-skull 2.4.0', battery: 41, sdUsedMb: 3.0, sdTotalMb: 32, fileCount: 4, supportsFormats: ['wav'], audioSpec: { sampleRate: 44100, bitDepth: 16, channels: 2 } },
       // prettier-ignore
       { id: 'FOG:1', name: 'Fog machine', type: 'relay', iconHint: 'fog', connection: 'online', rssi: -49, apiVersion: '1.0.0', firmware: 'vox-relay 1.8.2' },
       // prettier-ignore

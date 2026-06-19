@@ -14,9 +14,10 @@ export const transcodeRouter: Router = Router();
 transcodeRouter.post('/', raw({ type: '*/*', limit: '64mb' }), async (req, res) => {
   const hash = String(req.query.hash ?? '');
   const spec: TargetSpec = {
-    sampleRate: Number(req.query.sampleRate ?? 22050),
+    // Default WAV spec: 44.1 kHz / 16-bit / stereo (per-device audioSpec overrides).
+    sampleRate: Number(req.query.sampleRate ?? 44100),
     bitDepth: Number(req.query.bitDepth ?? 16),
-    channels: Number(req.query.channels ?? 1) === 2 ? 2 : 1,
+    channels: Number(req.query.channels ?? 2) === 1 ? 1 : 2,
   };
   if (!hash) return res.status(400).json({ error: 'Missing ?hash= (source content hash).' });
   if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
