@@ -81,8 +81,10 @@ export interface ShowPackage {
  * `.vox` JSON plus its `audio/` files. Validates + migrates the show via
  * {@link loadShow}. Throws on a malformed archive or missing show.
  */
-export async function readShowPackage(file: File): Promise<ShowPackage> {
-  const entries = await readZip(file);
+export async function readShowPackage(
+  input: Blob | ArrayBuffer | Uint8Array,
+): Promise<ShowPackage> {
+  const entries = await readZip(input);
   const voxEntry = entries.find((e) => e.name.toLowerCase().endsWith('.vox'));
   if (!voxEntry) throw new Error('No .vox show found in package.');
 
@@ -107,6 +109,23 @@ export async function readShowPackage(file: File): Promise<ShowPackage> {
 /** True if a file looks like a show package (zip) rather than a bare .vox. */
 export function isShowPackage(file: File): boolean {
   return file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
+}
+
+/** Parse already-read .vox bytes (JSON), validating + migrating via loadShow. */
+export function parseShowBytes(bytes: ArrayBuffer): MigrationResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new Error('Not a valid .vox file (expected JSON).');
+  }
+  return loadShow(parsed);
+}
+
+/** Detect a zip by its local-file-header magic ("PK\x03\x04"). */
+export function looksLikeZip(bytes: ArrayBuffer): boolean {
+  const b = new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength));
+  return b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04;
 }
 
 function safeName(name: string): string {

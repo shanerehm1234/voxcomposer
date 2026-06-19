@@ -106,9 +106,14 @@ export function createZip(entries: ZipEntry[]): Blob {
  * method is supported — which is all {@link createZip} produces. Throws on a
  * compressed or malformed archive.
  */
-export async function readZip(blob: Blob): Promise<ZipEntry[]> {
-  const buf = new Uint8Array(await blob.arrayBuffer());
-  const dv = new DataView(buf.buffer);
+export async function readZip(input: Blob | ArrayBuffer | Uint8Array): Promise<ZipEntry[]> {
+  const buf =
+    input instanceof Uint8Array
+      ? input
+      : input instanceof ArrayBuffer
+        ? new Uint8Array(input)
+        : new Uint8Array(await input.arrayBuffer());
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 
   // Find the End Of Central Directory record, scanning back from the end.
   let eocd = -1;

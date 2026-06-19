@@ -1,9 +1,9 @@
 import type { VoxClip, VoxShow } from '@voxcomposer/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { decodeAudioFile } from '../audio/analyze.js';
 import { startPlayback, stopPlayback } from '../audio/engine.js';
-import { detectFormat, hashFile, isAcceptedAudio } from '../audio/format.js';
-import { copyAsset, registerAsset } from '../audio/registry.js';
+import { isAcceptedAudio } from '../audio/format.js';
+import { buildAudioClip } from '../audio/import.js';
+import { copyAsset } from '../audio/registry.js';
 import { trackColor } from '../styles/palette.js';
 import { saveAudioBlob } from '../storage/db.js';
 import {
@@ -496,59 +496,36 @@ export function Timeline({
   }, []);
 
   // --- Audio import via OS file drop ---------------------------------------
-  const importAudioFile = useCallback(
-    async (file: File, dropX: number, dropY: number) => {
-      // Choose the track under the cursor if it's audio; else the first audio track.
+  // `bytes` is read synchronously in the drop handler (see onDrop) — re-reading
+  // a dropped file later fails on some platforms, so we never touch the File again.
+  const importAudioBytes = useCallback(
+    async (bytes: ArrayBuffer, filename: string, mime: string, dropX: number, dropY: number) => {
+      // Place on the track under the cursor if it's audio; else the first audio track.
       const idx = trackIndexAtY(dropY, show.tracks.length);
       const underCursor = idx >= 0 ? show.tracks[idx] : undefined;
       const target =
         underCursor?.type === 'audio' ? underCursor : show.tracks.find((t) => t.type === 'audio');
-      if (!target) return;
+      if (!target) {
+        onNotify?.('No audio track to drop onto — add one with + Track', 'error');
+        return;
+      }
 
       setImporting(true);
       try {
-        const decoded = await decodeAudioFile(file);
         const startMs = Math.max(0, snap(xToMs(viewportRef.current, dropX), true));
-        const clipId =
-          typeof crypto !== 'undefined' && 'randomUUID' in crypto
-            ? crypto.randomUUID()
-            : `clip-${Date.now()}`;
-        registerAsset(clipId, decoded, file.name, file);
-        // Persist the raw audio locally so it survives a reload.
-        void saveAudioBlob(clipId, file.name, file);
-
-        const clip: VoxClip = {
-          id: clipId,
-          startMs,
-          durationMs: Math.round(decoded.durationMs),
-          type: 'audio',
-          data: {
-            filename: file.name,
-            deviceId: target.deviceId,
-            volume: 1,
-            // Tells the OcularVox board to run its onboard FFT jaw sync; the
-            // composer does not compute jaw movement, only plays the file on cue.
-            jawSync: true,
-            jawMode: 'FFT auto',
-            // Source format + content hash. MP3/OGG/M4A play in-browser for
-            // preview; the server transcodes to WAV at sync time if the target
-            // device only supports WAV (cache keyed by this hash).
-            sourceFormat: detectFormat(file),
-            sourceHash: await hashFile(file),
-          },
-        };
+        const clip = await buildAudioClip(bytes, filename, mime, target.deviceId, startMs);
         const next = addClip(show, target.id, clip);
         draftRef.current = next;
         onCommit(next);
-        selectOne(clipId);
+        selectOne(clip.id);
         dirtyRef.current = true;
         onNotify?.(
-          `Added “${file.name}” to ${target.label} at ${(startMs / 1000).toFixed(1)}s`,
+          `Added “${filename}” to ${target.label} at ${(startMs / 1000).toFixed(1)}s`,
           'success',
         );
       } catch (err) {
         console.error('Audio import failed:', err);
-        onNotify?.(`Couldn't import “${file.name}”`, 'error');
+        onNotify?.(`Couldn't import “${filename}”`, 'error');
       } finally {
         setImporting(false);
       }
@@ -573,14 +550,17 @@ export function Timeline({
       e.preventDefault();
       setDropActive(false);
       const file = Array.from(e.dataTransfer.files).find(isAcceptedAudio);
-      if (!file) return;
+      if (!file) return; // .vox/.zip handled at the window level (App)
       const rect = canvasRef.current!.getBoundingClientRect();
       const dropX = e.clientX - rect.left - LAYOUT.trackHeaderWidth;
       const dropY = e.clientY - rect.top;
       if (dropX < 0) return;
-      void importAudioFile(file, dropX, dropY);
+      // Read the bytes NOW, synchronously, while the dropped file is still valid.
+      const bytes = file.arrayBuffer();
+      const { name, type } = file;
+      void bytes.then((b) => importAudioBytes(b, name, type, dropX, dropY));
     },
-    [importAudioFile],
+    [importAudioBytes],
   );
 
   // --- Duplicate / copy / paste (operate on the whole selection) -----------

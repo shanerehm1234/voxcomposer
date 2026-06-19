@@ -16,18 +16,23 @@ export function isAcceptedAudio(file: File): boolean {
 
 /** Determine the source format from a file's name/MIME. */
 export function detectFormat(file: File): AudioSourceFormat {
-  const name = file.name.toLowerCase();
-  if (name.endsWith('.mp3') || file.type === 'audio/mpeg') return 'mp3';
-  if (name.endsWith('.ogg') || file.type === 'audio/ogg') return 'ogg';
-  if (
-    name.endsWith('.m4a') ||
-    file.type === 'audio/mp4' ||
-    file.type === 'audio/x-m4a' ||
-    file.type === 'audio/aac'
-  ) {
+  return detectFormatByName(file.name, file.type);
+}
+
+/** Determine the source format from a filename (+ optional MIME). */
+export function detectFormatByName(name: string, mime = ''): AudioSourceFormat {
+  const n = name.toLowerCase();
+  if (n.endsWith('.mp3') || mime === 'audio/mpeg') return 'mp3';
+  if (n.endsWith('.ogg') || mime === 'audio/ogg') return 'ogg';
+  if (n.endsWith('.m4a') || mime === 'audio/mp4' || mime === 'audio/x-m4a' || mime === 'audio/aac') {
     return 'm4a';
   }
   return 'wav';
+}
+
+export function isAcceptedAudioName(name: string): boolean {
+  const n = name.toLowerCase();
+  return ACCEPTED_AUDIO_EXT.some((ext) => n.endsWith(ext));
 }
 
 /**
@@ -35,9 +40,13 @@ export function detectFormat(file: File): AudioSourceFormat {
  * server-side WAV transcode so re-syncing an unchanged file never reconverts.
  */
 export async function hashFile(file: File): Promise<string> {
+  return hashBytes(await file.arrayBuffer());
+}
+
+/** SHA-256 (first 32 hex chars) of already-read bytes. */
+export async function hashBytes(bytes: ArrayBuffer): Promise<string> {
   try {
-    const buf = await file.arrayBuffer();
-    const digest = await crypto.subtle.digest('SHA-256', buf);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
     return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
   } catch {
     return '';

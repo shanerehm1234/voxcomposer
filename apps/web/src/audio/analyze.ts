@@ -24,9 +24,15 @@ export interface DecodedAudio {
  * the right file on cue; we just need the waveform for the timeline display.
  */
 export async function decodeAudioFile(file: File): Promise<DecodedAudio> {
-  const arrayBuffer = await file.arrayBuffer();
-  // decodeAudioData detaches the buffer, so analysis reads from the AudioBuffer.
-  const buffer = await audioContext().decodeAudioData(arrayBuffer);
+  return decodeAudioBytes(await file.arrayBuffer());
+}
+
+/**
+ * Decode already-read audio bytes. decodeAudioData detaches the buffer it is
+ * given, so callers that still need the bytes must pass a copy.
+ */
+export async function decodeAudioBytes(bytes: ArrayBuffer): Promise<DecodedAudio> {
+  const buffer = await audioContext().decodeAudioData(bytes);
   const mono = downmixToMono(buffer);
   return {
     buffer,

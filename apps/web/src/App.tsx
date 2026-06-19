@@ -9,18 +9,20 @@ import { SettingsView } from './components/SettingsView.js';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay.js';
 import { Toast, type ToastMessage } from './components/Toast.js';
 import { makeDemoState } from './demo/demoData.js';
-import { findClip, replaceClip } from './timeline/edits.js';
+import { addClip, findClip, replaceClip } from './timeline/edits.js';
 import { useHistory } from './timeline/history.js';
 import { Timeline } from './timeline/Timeline.js';
 import { decodeAudioFile } from './audio/analyze.js';
+import { isAcceptedAudioName } from './audio/format.js';
+import { buildAudioClip } from './audio/import.js';
 import { registerAsset } from './audio/registry.js';
 import { useInstallPrompt } from './pwa/useInstallPrompt.js';
 import { clearAll, loadAllAudio, loadShowFromDb, saveAudioBlob, saveShow } from './storage/db.js';
 import {
   downloadShow,
   downloadShowPackage,
-  isShowPackage,
-  readShowFile,
+  looksLikeZip,
+  parseShowBytes,
   readShowPackage,
 } from './vox/voxFile.js';
 
@@ -96,12 +98,14 @@ export function App() {
     showToast(`Packaged ${show.name} + ${count} audio file${count === 1 ? '' : 's'}`, 'success');
   }, [show, showToast]);
 
-  const handleImportFile = useCallback(
-    async (file: File) => {
+  // Import a show from already-read bytes (a .vox JSON or a .zip package). Bytes
+  // are read synchronously at the drop/pick site — re-reading a dropped file
+  // later fails on some platforms.
+  const handleImportBytes = useCallback(
+    async (bytes: ArrayBuffer, filename: string) => {
       try {
-        if (isShowPackage(file)) {
-          const pkg = await readShowPackage(file);
-          // Decode + register each bundled audio file against its clip(s).
+        if (filename.toLowerCase().endsWith('.zip') || looksLikeZip(bytes)) {
+          const pkg = await readShowPackage(bytes);
           const byName = new Map(pkg.audio.map((a) => [a.filename, a.blob]));
           for (const track of pkg.result.show.tracks) {
             if (track.type !== 'audio') continue;
@@ -121,7 +125,7 @@ export function App() {
           commit(pkg.result.show);
           setSelectedClipIds([]);
           showToast(
-            `Imported package — ${pkg.result.show.name} + ${pkg.audio.length} audio file${
+            `Imported “${pkg.result.show.name}” + ${pkg.audio.length} audio file${
               pkg.audio.length === 1 ? '' : 's'
             }`,
             'success',
@@ -129,7 +133,7 @@ export function App() {
           return;
         }
 
-        const result = await readShowFile(file);
+        const result = parseShowBytes(bytes);
         commit(result.show);
         setSelectedClipIds([]);
         showToast(
@@ -145,20 +149,44 @@ export function App() {
     [commit, showToast],
   );
 
+  // Add an audio file (picked via the open button) to the first audio track.
+  const importAudioFromBytes = useCallback(
+    async (bytes: ArrayBuffer, filename: string, mime: string) => {
+      const track = show.tracks.find((t) => t.type === 'audio');
+      if (!track) {
+        showToast('No audio track yet — open the Timeline and add one', 'error');
+        return;
+      }
+      try {
+        const startMs = track.clips.reduce((m, c) => Math.max(m, c.startMs + c.durationMs), 0);
+        const clip = await buildAudioClip(bytes, filename, mime, track.deviceId, startMs);
+        commit(addClip(show, track.id, clip));
+        setSelectedClipIds([clip.id]);
+        showToast(`Added “${filename}” to ${track.label}`, 'success');
+      } catch {
+        showToast(`Couldn't import “${filename}”`, 'error');
+      }
+    },
+    [show, commit, showToast],
+  );
+
   // --- Drag a .vox / .zip anywhere to import (window-level = reliable) ------
   // Window listeners avoid React event-bubbling quirks where a drop on the
   // timeline canvas (which handles audio drops) wouldn't reach a parent handler.
   useEffect(() => {
-    const isShowFile = (f: File) => isShowPackage(f) || f.name.toLowerCase().endsWith('.vox');
+    const isShowFile = (n: string) => n.endsWith('.vox') || n.endsWith('.zip');
     const onDragOver = (e: DragEvent) => {
       if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) e.preventDefault();
     };
     const onDrop = (e: DragEvent) => {
-      const file = Array.from(e.dataTransfer?.files ?? []).find(isShowFile);
-      if (file) {
-        e.preventDefault();
-        void handleImportFile(file);
-      }
+      const file = Array.from(e.dataTransfer?.files ?? []).find((f) =>
+        isShowFile(f.name.toLowerCase()),
+      );
+      if (!file) return; // audio drops are handled by the timeline canvas
+      e.preventDefault();
+      const name = file.name;
+      // Read the bytes NOW, while the dropped file reference is still valid.
+      void file.arrayBuffer().then((b) => handleImportBytes(b, name));
     };
     window.addEventListener('dragover', onDragOver);
     window.addEventListener('drop', onDrop);
@@ -166,7 +194,7 @@ export function App() {
       window.removeEventListener('dragover', onDragOver);
       window.removeEventListener('drop', onDrop);
     };
-  }, [handleImportFile]);
+  }, [handleImportBytes]);
 
   // --- Persistence: restore on mount, autosave on change --------------------
   useEffect(() => {
@@ -258,11 +286,20 @@ export function App() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".vox,application/json,.zip,application/zip"
+        accept=".vox,application/json,.zip,application/zip,audio/*,.mp3,.wav,.ogg,.m4a"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) void handleImportFile(file);
+          if (file) {
+            const { name, type } = file;
+            void file
+              .arrayBuffer()
+              .then((b) =>
+                isAcceptedAudioName(name)
+                  ? importAudioFromBytes(b, name, type)
+                  : handleImportBytes(b, name),
+              );
+          }
           e.target.value = '';
         }}
       />
