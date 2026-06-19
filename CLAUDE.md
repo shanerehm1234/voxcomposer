@@ -73,8 +73,16 @@ Demo data in `apps/web/src/demo/demoData.ts`. Audio assets cached in `apps/web/s
 (module singleton, keyed by clip id) + persisted in `apps/web/src/storage/db.ts`. Plugin host in
 `apps/web/src/plugins/`. Git: github.com/shanerehm1234/voxcomposer (SSH origin); deploy via
 `scripts/deploy-demo.sh`.
-Next: backend/S3/auth → live preview (Socket.io) → file sync + server-side ffmpeg WAV transcode →
-servo keyframe editor → device/track creation UI in Devices tab → polish.
+Backend (apps/server) BUILT: local self-host (SQLite), project CRUD, ffmpeg MP3→WAV transcode
+(verified), Socket.io live-preview relay with a MockMaster, Dockerfile + docker-compose. Wheel-zoom
++ audio fade in/out (gain ramps + clip overlay) done. Editor↔server NOT wired yet.
+Next: wire editor live-preview to the server socket (active-clip resolver → preview_frame → Master,
+show device "responding" status) — build against MockMaster now, swap real Vox Master later (Shane
+needs to define the real Master interface; backpack boards not ready yet) → file sync to remotes →
+**DMX fixtures plugin**: import GDTF fixtures (GDTF Share / their "Vibrary" from the Vibe product;
+will need the Vibe's fixture code or a fresh GDTF parser) → per-fixture sliders (color/dimmer/pan/
+tilt) keyframed on the timeline → servo keyframe editor → eyes-as-plugin (color+animation) →
+device/track creation UI → accounts/S3 (deferred) → polish.
 
 Media stays OFF the server (Shane's call, to avoid bandwidth bills): audio lives in the browser
 (IndexedDB/object URLs) + on the local network (Master → SD cards). Server only ever stores the
