@@ -26,6 +26,9 @@ export const AudioClipData = z.object({
   deviceId: z.string().min(1),
   /** Linear gain, 0 .. 1. */
   volume: z.number().min(0).max(1).default(1),
+  /** Fade-in / fade-out durations in ms (0 = no fade). */
+  fadeInMs: Millis.default(0),
+  fadeOutMs: Millis.default(0),
   jawSync: z.boolean().default(false),
   /** Precomputed jaw envelope; present once analysed. */
   jawKeyframes: z.array(JawKeyframe).optional(),

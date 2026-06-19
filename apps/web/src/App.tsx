@@ -145,6 +145,29 @@ export function App() {
     [commit, showToast],
   );
 
+  // --- Drag a .vox / .zip anywhere to import (window-level = reliable) ------
+  // Window listeners avoid React event-bubbling quirks where a drop on the
+  // timeline canvas (which handles audio drops) wouldn't reach a parent handler.
+  useEffect(() => {
+    const isShowFile = (f: File) => isShowPackage(f) || f.name.toLowerCase().endsWith('.vox');
+    const onDragOver = (e: DragEvent) => {
+      if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) e.preventDefault();
+    };
+    const onDrop = (e: DragEvent) => {
+      const file = Array.from(e.dataTransfer?.files ?? []).find(isShowFile);
+      if (file) {
+        e.preventDefault();
+        void handleImportFile(file);
+      }
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [handleImportFile]);
+
   // --- Persistence: restore on mount, autosave on change --------------------
   useEffect(() => {
     let cancelled = false;
@@ -221,23 +244,7 @@ export function App() {
   }, [undo, redo, handleExport]);
 
   return (
-    <div
-      className="flex h-screen flex-col bg-bg text-text"
-      onDragOver={(e) => {
-        if (e.dataTransfer.types.includes('Files')) e.preventDefault();
-      }}
-      onDrop={(e) => {
-        // Importing a show file anywhere in the app. Audio drops are handled by
-        // the timeline canvas; here we only catch .vox / .zip packages.
-        const file = Array.from(e.dataTransfer.files).find(
-          (f) => isShowPackage(f) || f.name.toLowerCase().endsWith('.vox'),
-        );
-        if (file) {
-          e.preventDefault();
-          void handleImportFile(file);
-        }
-      }}
-    >
+    <div className="flex h-screen flex-col bg-bg text-text">
       <AppHeader
         remotesOnline={remotesOnline}
         activeView={activeView}
@@ -274,6 +281,7 @@ export function App() {
               selectedClipIds={selectedClipIds}
               onSelectClips={setSelectedClipIds}
               onCommit={commit}
+              onNotify={showToast}
             />
           )}
           {activeView === 'devices' && <DevicesView devices={demo.devices} />}

@@ -48,6 +48,8 @@ interface TimelineProps {
   onSelectClips: (clipIds: string[]) => void;
   /** Commit a discrete edit (after a drag/resize/delete) to the undo stack. */
   onCommit: (next: VoxShow) => void;
+  /** Surface a brief status message (e.g. where a dropped clip landed). */
+  onNotify?: (text: string, kind?: 'info' | 'success' | 'error') => void;
 }
 
 /**
@@ -56,7 +58,13 @@ interface TimelineProps {
  * React state is reserved for things the surrounding chrome reads (the time
  * readout, zoom label), so the component never re-renders at frame rate.
  */
-export function Timeline({ show, selectedClipIds, onSelectClips, onCommit }: TimelineProps) {
+export function Timeline({
+  show,
+  selectedClipIds,
+  onSelectClips,
+  onCommit,
+  onNotify,
+}: TimelineProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -472,13 +480,17 @@ export function Timeline({ show, selectedClipIds, onSelectClips, onCommit }: Tim
 
   // --- Wheel: pan horizontally; Ctrl/Cmd = zoom at cursor -------------------
   const onWheel = useCallback((e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      const cx = e.clientX - canvasRef.current!.getBoundingClientRect().left - LAYOUT.trackHeaderWidth;
-      const dir = e.deltaY < 0 ? ZOOM.factor : 1 / ZOOM.factor;
-      viewportRef.current = zoomAt(viewportRef.current, Math.max(0, cx), viewportRef.current.pxPerMs * dir);
+    const cx = e.clientX - canvasRef.current!.getBoundingClientRect().left - LAYOUT.trackHeaderWidth;
+    // Normalise line-mode wheels to pixels for consistent feel.
+    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    const dx = e.deltaMode === 1 ? e.deltaX * 16 : e.deltaX;
+    if (e.shiftKey) {
+      // Shift+wheel = horizontal pan.
+      viewportRef.current = panByPx(viewportRef.current, dx || dy);
     } else {
-      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-      viewportRef.current = panByPx(viewportRef.current, delta);
+      // Wheel = smooth zoom toward the cursor (the critical timeline gesture).
+      const factor = Math.exp(-dy * 0.0015);
+      viewportRef.current = zoomAt(viewportRef.current, Math.max(0, cx), viewportRef.current.pxPerMs * factor);
     }
     dirtyRef.current = true;
   }, []);
@@ -530,13 +542,18 @@ export function Timeline({ show, selectedClipIds, onSelectClips, onCommit }: Tim
         onCommit(next);
         selectOne(clipId);
         dirtyRef.current = true;
+        onNotify?.(
+          `Added “${file.name}” to ${target.label} at ${(startMs / 1000).toFixed(1)}s`,
+          'success',
+        );
       } catch (err) {
         console.error('Audio import failed:', err);
+        onNotify?.(`Couldn't import “${file.name}”`, 'error');
       } finally {
         setImporting(false);
       }
     },
-    [show, onCommit, selectOne],
+    [show, onCommit, selectOne, onNotify],
   );
 
   const onDragOver = useCallback((e: React.DragEvent) => {

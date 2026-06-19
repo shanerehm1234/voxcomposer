@@ -1,4 +1,4 @@
-import type { VoxShow, VoxTrack } from '@voxcomposer/shared';
+import type { VoxClip, VoxShow, VoxTrack } from '@voxcomposer/shared';
 import { hexToRgba, PALETTE, trackColor } from '../styles/palette.js';
 import { visibleTicks } from './ruler.js';
 import { LAYOUT, msToPx, msToX, type Viewport } from './viewport.js';
@@ -185,6 +185,7 @@ function drawClips(ctx: CanvasRenderingContext2D, s: RenderState) {
         } else {
           drawMockWaveform(ctx, x + 6, y + 5, w - 12, h - 10, seedFromString(clip.id), accent);
         }
+        drawFades(ctx, clip, viewport, x, y, w, h);
       }
 
       // Inner top highlight for a glassy edge.
@@ -223,6 +224,60 @@ function drawClips(ctx: CanvasRenderingContext2D, s: RenderState) {
       }
     }
   });
+}
+
+/** Draw fade-in / fade-out ramps on an audio clip. */
+function drawFades(
+  ctx: CanvasRenderingContext2D,
+  clip: VoxClip,
+  vp: Viewport,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  const data = clip.data as Record<string, unknown>;
+  const fadeInMs = Number(data.fadeInMs ?? 0);
+  const fadeOutMs = Number(data.fadeOutMs ?? 0);
+  if (fadeInMs <= 0 && fadeOutMs <= 0) return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.lineWidth = 1;
+
+  if (fadeInMs > 0) {
+    const fw = Math.min(w, msToPx(vp, fadeInMs));
+    ctx.fillStyle = 'rgba(15,17,23,0.5)';
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + fw, y);
+    ctx.lineTo(x, y + h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+    ctx.beginPath();
+    ctx.moveTo(x, y + h);
+    ctx.lineTo(x + fw, y);
+    ctx.stroke();
+  }
+  if (fadeOutMs > 0) {
+    const fw = Math.min(w, msToPx(vp, fadeOutMs));
+    ctx.fillStyle = 'rgba(15,17,23,0.5)';
+    ctx.beginPath();
+    ctx.moveTo(x + w - fw, y);
+    ctx.lineTo(x + w, y);
+    ctx.lineTo(x + w, y + h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+    ctx.beginPath();
+    ctx.moveTo(x + w - fw, y);
+    ctx.lineTo(x + w, y + h);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawLoopRegion(

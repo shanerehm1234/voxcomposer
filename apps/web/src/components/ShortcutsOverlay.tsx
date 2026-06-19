@@ -38,7 +38,8 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
   {
     title: 'View & file',
     items: [
-      ['Ctrl + wheel', 'Zoom to cursor'],
+      ['Wheel', 'Zoom to cursor'],
+      ['⇧ + wheel', 'Pan horizontally'],
       ['+ / −', 'Zoom in / out'],
       ['⌘⇧F', 'Fit show to window'],
       ['Alt-drag', 'Pan the timeline'],

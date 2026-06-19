@@ -30,13 +30,41 @@ export function startPlayback(show: VoxShow, fromMs: number): void {
       const offsetSec = Math.max(0, (fromMs - clip.startMs) / 1000);
       if (offsetSec >= asset.buffer.duration) continue;
 
+      const data = clip.data as Record<string, unknown>;
+      const v = Number(data.volume ?? 1);
+      const volume = Number.isFinite(v) ? v : 1;
+      const fadeInMs = Math.max(0, Number(data.fadeInMs ?? 0));
+      const fadeOutMs = Math.max(0, Number(data.fadeOutMs ?? 0));
+
       const src = ctx.createBufferSource();
       src.buffer = asset.buffer;
       const gain = ctx.createGain();
-      const volume = Number((clip.data as Record<string, unknown>).volume ?? 1);
-      gain.gain.value = Number.isFinite(volume) ? volume : 1;
+
+      // Timeline time -> audio-clock time.
+      const at = (timelineMs: number) => t0 + (timelineMs - fromMs) / 1000;
+
+      // Fade in (clamped to "now" when the playhead starts mid-fade).
+      if (fadeInMs > 0) {
+        const fadeInEnd = clip.startMs + fadeInMs;
+        const startGain = fromMs >= fadeInEnd ? volume : volume * (offsetSec / (fadeInMs / 1000) || 0);
+        gain.gain.setValueAtTime(Math.min(volume, startGain), Math.max(whenSec, ctx.currentTime));
+        if (fromMs < fadeInEnd) gain.gain.linearRampToValueAtTime(volume, at(fadeInEnd));
+      } else {
+        gain.gain.setValueAtTime(volume, Math.max(whenSec, ctx.currentTime));
+      }
+
+      // Fade out, anchored before the clip end.
+      if (fadeOutMs > 0) {
+        const fadeOutStart = Math.max(clip.startMs, clipEnd - fadeOutMs);
+        gain.gain.setValueAtTime(volume, Math.max(at(fadeOutStart), ctx.currentTime));
+        gain.gain.linearRampToValueAtTime(0.0001, at(clipEnd));
+      }
+
       src.connect(gain).connect(ctx.destination);
       src.start(whenSec, offsetSec);
+      // Stop at the clip's end so a clip shorter than its file doesn't run over.
+      const stopSec = at(clipEnd);
+      if (stopSec > whenSec) src.stop(stopSec);
       src.onended = () => {
         activeSources = activeSources.filter((s) => s !== src);
       };
