@@ -77,3 +77,30 @@ export const VOX_EVENTS = {
   deviceInventory: 'device_inventory',
   previewAck: 'preview_ack',
 } as const;
+
+/**
+ * The Vox-Link wire envelope. Every message on the WebSocket between the Vox
+ * Composer and the Vox Master is JSON `{ event, payload }`. This is the raw-WS
+ * framing the ESP-IDF firmware serves (esp_http_server / httpd_ws); it is NOT
+ * Socket.io. The default WebSocket path is `/voxlink`.
+ */
+export interface VoxLinkMessage {
+  event: string;
+  payload?: unknown;
+}
+
+export const VOX_LINK_WS_PATH = '/voxlink';
+
+export function encodeVoxLink(event: string, payload?: unknown): string {
+  return JSON.stringify({ event, payload });
+}
+
+/** Parse an incoming Vox-Link frame; returns null if it isn't a valid envelope. */
+export function decodeVoxLink(raw: string): VoxLinkMessage | null {
+  try {
+    const msg = JSON.parse(raw) as VoxLinkMessage;
+    return msg && typeof msg.event === 'string' ? msg : null;
+  } catch {
+    return null;
+  }
+}

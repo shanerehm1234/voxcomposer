@@ -2,12 +2,10 @@ import { VOX_LINK_API_VERSION } from '@voxcomposer/shared';
 import cors from 'cors';
 import express, { type Express } from 'express';
 import { createServer } from 'node:http';
-import { Server as SocketServer } from 'socket.io';
-import type { ClientToServerEvents, ServerToClientEvents } from '@voxcomposer/shared';
 import { env } from './env.js';
 import { projectsRouter } from './routes/projects.js';
 import { transcodeRouter } from './routes/transcode.js';
-import { attachSocketHandlers } from './socket.js';
+import { attachVoxLink } from './voxlink.js';
 
 const app: Express = express();
 app.use(cors({ origin: env.corsOrigin }));
@@ -21,13 +19,10 @@ app.use('/api/projects', projectsRouter);
 app.use('/api/transcode', transcodeRouter);
 
 const httpServer = createServer(app);
-const io = new SocketServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-  cors: { origin: env.corsOrigin },
-});
+// Vox-Link mock Master over raw WebSocket (same protocol as the real firmware).
+const voxlink = attachVoxLink(httpServer);
 
-attachSocketHandlers(io);
-
-export { app, io };
+export { app, voxlink };
 
 // Start only when run directly (not when imported by tests).
 if (process.env.NODE_ENV !== 'test') {

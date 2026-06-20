@@ -74,11 +74,17 @@ Demo data in `apps/web/src/demo/demoData.ts`. Audio assets cached in `apps/web/s
 `apps/web/src/plugins/`. Git: github.com/shanerehm1234/voxcomposer (SSH origin); deploy via
 `scripts/deploy-demo.sh`.
 Backend (apps/server) BUILT: local self-host (SQLite), project CRUD, ffmpeg MP3→WAV transcode
-(verified), Socket.io live-preview relay with a MockMaster, Dockerfile + docker-compose. Wheel-zoom
-+ audio fade in/out (gain ramps + clip overlay) done. Editor↔server NOT wired yet.
-Next: wire editor live-preview to the server socket (active-clip resolver → preview_frame → Master,
-show device "responding" status) — build against MockMaster now, swap real Vox Master later (Shane
-needs to define the real Master interface; backpack boards not ready yet) → file sync to remotes →
+(verified), Dockerfile + docker-compose. Wheel-zoom + audio fade in/out done.
+**Vox-Link transport = raw WebSocket** (JSON `{event,payload}` envelope, path `/voxlink`), NOT
+Socket.io — the ESP-IDF VoxMaster firmware serves a raw `httpd_ws` endpoint, so the editor + the
+MockMaster (apps/server `src/voxlink.ts`) both speak raw WS. Envelope helpers in
+`packages/shared/src/protocol.ts` (encodeVoxLink/decodeVoxLink/VOX_LINK_WS_PATH). Editor side:
+`apps/web/src/voxlink/client.ts`; Settings → "Test connection" really connects + device_scan + shows
+remotes responding (verified vs the mock). The VOXMASTER firmware is a SEPARATE repo/session
+(ESP-IDF on a Waveshare ESP32-P4, reusing VIBE components; Vox-Link over WiFi UDP to remotes, ESP-NOW
+later). Default Master port: 8080 (mock) / 80 (board).
+Next: "Preview live" — persistent client + active-clip resolver → stream preview_frame as the
+playhead plays, show per-device ack status on the timeline/devices → file sync to remotes →
 **DMX fixtures plugin**: import GDTF fixtures (GDTF Share / their "Vibrary" from the Vibe product;
 will need the Vibe's fixture code or a fresh GDTF parser) → per-fixture sliders (color/dimmer/pan/
 tilt) keyframed on the timeline → servo keyframe editor → eyes-as-plugin (color+animation) →

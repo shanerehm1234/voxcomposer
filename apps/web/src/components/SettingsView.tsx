@@ -2,6 +2,7 @@ import { VOX_FORMAT_VERSION, VOX_LINK_API_VERSION } from '@voxcomposer/shared';
 import { useState } from 'react';
 import { registerBuiltins } from '../plugins/builtins.js';
 import { pluginRegistry } from '../plugins/registry.js';
+import { masterWsUrl, testMasterConnection } from '../voxlink/client.js';
 import { IconCheck, IconChip, IconRefresh } from './icons.js';
 import { ViewHeader } from './DevicesView.js';
 
@@ -17,15 +18,26 @@ export function SettingsView({ master, onReset }: SettingsViewProps) {
   const [devMode, setDevMode] = useState(false);
   const [autosave, setAutosave] = useState(true);
   const [ip, setIp] = useState(master.ip);
-  const [testState, setTestState] = useState<'idle' | 'testing' | 'ok'>('idle');
+  const [port, setPort] = useState('8080');
+  const [testState, setTestState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+  const [testMsg, setTestMsg] = useState('');
 
-  const runTest = () => {
+  const runTest = async () => {
     if (testState === 'testing') return;
     setTestState('testing');
-    setTimeout(() => {
+    setTestMsg('');
+    const result = await testMasterConnection(masterWsUrl(ip.trim(), Number(port) || 8080));
+    if (result.ok) {
       setTestState('ok');
-      setTimeout(() => setTestState('idle'), 2500);
-    }, 1200);
+      setTestMsg(
+        `Connected · ${result.devices} remote${result.devices === 1 ? '' : 's'} responding` +
+          (result.apiVersion ? ` · Vox-Link v${result.apiVersion}` : ''),
+      );
+    } else {
+      setTestState('fail');
+      setTestMsg(result.error ?? 'Connection failed');
+    }
+    setTimeout(() => setTestState('idle'), 6000);
   };
 
   return (
@@ -41,38 +53,52 @@ export function SettingsView({ master, onReset }: SettingsViewProps) {
                 className="w-40 rounded-lg border border-border/70 bg-bg/50 px-3 py-1.5 text-right font-mono text-[13px] text-text focus:border-purple/50 focus:outline-none"
               />
             </Row>
-            <Row label="Port">
+            <Row label="Port" desc="8080 for the local mock; 80 for a Vox Master board">
               <input
-                defaultValue="7878"
+                value={port}
+                onChange={(e) => setPort(e.target.value)}
                 className="w-24 rounded-lg border border-border/70 bg-bg/50 px-3 py-1.5 text-right font-mono text-[13px] text-text focus:border-purple/50 focus:outline-none"
               />
             </Row>
             <Row label="Status">
               <span
                 className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium ${
-                  master.connected
+                  testState === 'ok'
                     ? 'bg-teal/12 text-teal-l ring-1 ring-inset ring-teal/25'
-                    : 'bg-bg3/50 text-muted ring-1 ring-inset ring-border'
+                    : testState === 'fail'
+                      ? 'bg-[#E8623D]/12 text-[#E8623D] ring-1 ring-inset ring-[#E8623D]/25'
+                      : 'bg-bg3/50 text-muted ring-1 ring-inset ring-border'
                 }`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${master.connected ? 'bg-teal' : 'bg-muted'}`} />
-                {master.connected ? 'Connected' : 'Disconnected'}
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    testState === 'ok' ? 'bg-teal' : testState === 'fail' ? 'bg-[#E8623D]' : 'bg-muted'
+                  }`}
+                />
+                {testState === 'ok' ? 'Connected' : testState === 'fail' ? 'Disconnected' : 'Unknown'}
               </span>
             </Row>
+            {testMsg && (
+              <div className={`px-3 pb-1 text-[12px] ${testState === 'fail' ? 'text-[#E8623D]' : 'text-teal-l'}`}>
+                {testMsg}
+              </div>
+            )}
             <div className="pt-1">
               <button
-                onClick={runTest}
+                onClick={() => void runTest()}
                 disabled={testState === 'testing'}
                 className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-[13px] font-semibold text-white shadow-[0_2px_12px_rgba(83,74,183,0.4)] transition-all hover:brightness-110 ${
                   testState === 'ok'
                     ? 'bg-gradient-to-b from-teal to-[#147a59]'
-                    : 'bg-gradient-to-b from-purple to-purple-d'
+                    : testState === 'fail'
+                      ? 'bg-gradient-to-b from-[#E8623D] to-[#a83a1f]'
+                      : 'bg-gradient-to-b from-purple to-purple-d'
                 }`}
               >
                 {testState === 'testing' && <IconRefresh className="h-4 w-4 animate-spin" />}
                 {testState === 'ok' && <IconCheck className="h-4 w-4" />}
                 {testState === 'testing'
-                  ? 'Testing…'
+                  ? 'Connecting…'
                   : testState === 'ok'
                     ? 'Connected'
                     : 'Test connection'}
