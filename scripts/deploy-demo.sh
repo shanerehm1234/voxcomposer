@@ -8,11 +8,18 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB_DIR="$REPO_ROOT/apps/web"
-GVFS="/run/user/$(id -u)/gvfs/smb-share:server=192.168.1.190,share=appdata"
-DEST="$GVFS/binhex-nginx/nginx/html/voxcomposerapp/demo"
+REL="binhex-nginx/nginx/html/voxcomposerapp/demo"
 
-if [ ! -d "$GVFS" ]; then
-  echo "✗ SMB share not mounted at: $GVFS"
+# The 'appdata' share may be mounted by IP or by hostname (unraid.local) — find
+# whichever GVFS mount actually has the demo folder.
+GVFS_ROOT="/run/user/$(id -u)/gvfs"
+DEST=""
+for m in "$GVFS_ROOT"/smb-share:server=*,share=appdata; do
+  [ -d "$m/$REL" ] && DEST="$m/$REL" && break
+done
+
+if [ -z "$DEST" ]; then
+  echo "✗ 'appdata' SMB share not mounted (looked under $GVFS_ROOT)."
   echo "  Open it once in your file manager (smb://192.168.1.190/appdata) and retry."
   exit 1
 fi
