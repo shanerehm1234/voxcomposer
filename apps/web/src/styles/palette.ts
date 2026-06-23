@@ -32,6 +32,8 @@ export const TRACK_COLORS: Record<string, { fill: string; accent: string }> = {
   relay: { fill: '#3a2f12', accent: '#E0A92B' },
   servo: { fill: PALETTE.purpleD, accent: PALETTE.purpleL },
   neck: { fill: PALETTE.purpleD, accent: PALETTE.purpleL },
+  pixel: { fill: '#2a2418', accent: '#FF8A3D' },
+  eyes: { fill: '#241f3a', accent: PALETTE.purpleL },
   plugin: { fill: '#21262f', accent: PALETTE.muted },
 };
 

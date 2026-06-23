@@ -71,6 +71,7 @@ export function makeDemoState(): DemoState {
     devices: [
       { id: 'MA:STR', name: 'Master', type: 'audio', apiVersion: '1.0.0' },
       { id: 'WLED:1', name: 'Porch Pixels', type: 'pixel', apiVersion: '1.0.0' },
+      { id: 'RING:1', name: 'Eye Ring', type: 'pixel', apiVersion: '1.0.0' },
       {
         id: 'SK:01',
         name: 'Skelly 1',
@@ -139,6 +140,17 @@ export function makeDemoState(): DemoState {
         clips: [
           clip('c-wled-1', 800, 4000, 'wled', { host: '192.168.1.50', preset: 3, label: 'Eerie glow' }),
           clip('c-wled-2', 8200, 1600, 'wled', { host: '192.168.1.50', preset: 7, label: 'Lightning' }),
+        ],
+      },
+      {
+        id: 't-ring',
+        deviceId: 'RING:1',
+        type: 'pixel',
+        label: 'Eye Ring',
+        clips: [
+          clip('c-ring-1', 1000, 5000, 'pixel', { animation: 'glow', color: '#1030FF', brightness: 200 }),
+          clip('c-ring-2', 8200, 1400, 'pixel', { animation: 'flash', color: '#FF2A2A', brightness: 255 }),
+          clip('c-ring-3', 22000, 6000, 'pixel', { animation: 'chase', color: '#39FF14', brightness: 180 }),
         ],
       },
     ],

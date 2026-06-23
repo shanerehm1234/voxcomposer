@@ -66,6 +66,34 @@ export const ServoClipData = z.object({
 });
 export type ServoClipData = z.infer<typeof ServoClipData>;
 
+/** Animations a WS281x pixel/LED prop understands (matches the ring remote). */
+export const PixelAnimation = z.enum(['solid', 'pulse', 'glow', 'flash', 'chase', 'off']);
+export type PixelAnimation = z.infer<typeof PixelAnimation>;
+
+/**
+ * Pixel (addressable LED) clip. The Master relays `data` verbatim to the prop,
+ * so these field names must match the remote firmware (WS281x ring, OcularVox).
+ */
+export const PixelClipData = z.object({
+  animation: PixelAnimation.default('solid'),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default('#FF6A00'),
+  brightness: z.number().int().min(0).max(255).optional(),
+});
+export type PixelClipData = z.infer<typeof PixelClipData>;
+
+/** Eyes (OcularVox) clip — animation name + colour, relayed verbatim. */
+export const EyesClipData = z.object({
+  animation: z.string().default('idle'),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default('#AFA9EC'),
+});
+export type EyesClipData = z.infer<typeof EyesClipData>;
+
 export const PluginClipData = z.object({
   pluginId: z.string().min(1),
   payload: z.record(z.unknown()),

@@ -81,6 +81,8 @@ function ClipFields({
   const isAudio = draft.type === 'audio';
   const isDmx = draft.type === 'dmx';
   const isRelay = draft.type === 'relay';
+  const isPixel = draft.type === 'pixel';
+  const isEyes = draft.type === 'eyes';
   const plugin = pluginRegistry.forTrackType(draft.type);
   const neck = data.neck as Record<string, string> | undefined;
   const deviceId = typeof data.deviceId === 'string' ? data.deviceId : undefined;
@@ -268,6 +270,76 @@ function ClipFields({
               </select>
             </div>
           </div>
+        </>
+      )}
+
+      {(isPixel || isEyes) && (
+        <>
+          <SectionDivider>{isPixel ? 'Pixel (LED)' : 'Eyes'}</SectionDivider>
+          <div className="mt-1">
+            <FieldLabel>Animation</FieldLabel>
+            {isPixel ? (
+              <select
+                value={String(data.animation ?? 'solid')}
+                onChange={(e) => commitData({ animation: e.target.value })}
+                className="w-full rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 text-[13px] capitalize text-text focus:border-purple/50 focus:outline-none"
+              >
+                {['solid', 'pulse', 'glow', 'flash', 'chase', 'off'].map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={String(data.animation ?? '')}
+                onChange={(e) => patchData({ animation: e.target.value })}
+                onBlur={() => commit()}
+                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                className="w-full rounded-lg border border-border/80 bg-bg/60 px-3 py-2 text-[13px] text-text focus:border-purple/50 focus:outline-none"
+              />
+            )}
+          </div>
+          <div className="mt-2.5">
+            <FieldLabel>Color</FieldLabel>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={String(data.color ?? '#FF6A00')}
+                onChange={(e) => commitData({ color: e.target.value })}
+                className="h-8 w-12 cursor-pointer rounded border border-border/80 bg-bg/60"
+                aria-label="Color"
+              />
+              <input
+                value={String(data.color ?? '#FF6A00')}
+                onChange={(e) => patchData({ color: e.target.value })}
+                onBlur={() => commit()}
+                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                className="flex-1 rounded-lg border border-border/80 bg-bg/60 px-3 py-2 font-mono text-xs text-text focus:border-purple/50 focus:outline-none"
+              />
+            </div>
+          </div>
+          {isPixel && (
+            <div className="mt-3">
+              <FieldLabel>Brightness</FieldLabel>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={255}
+                  aria-label="Brightness"
+                  value={Number(data.brightness ?? 255)}
+                  onChange={(e) => patchData({ brightness: Number(e.target.value) })}
+                  onPointerUp={() => commit()}
+                  onKeyUp={() => commit()}
+                  className="vox-range h-1.5 flex-1"
+                />
+                <span className="w-10 text-right font-mono text-xs text-text">
+                  {Number(data.brightness ?? 255)}
+                </span>
+              </div>
+            </div>
+          )}
         </>
       )}
 

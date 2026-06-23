@@ -758,7 +758,11 @@ export function Timeline({
           ? ['dmx']
           : type === 'relay'
             ? ['relay']
-            : ['skull', 'audio'];
+            : type === 'pixel'
+              ? ['pixel']
+              : type === 'eyes'
+                ? ['skull']
+                : ['skull', 'audio'];
       const dev = cur.devices.find((d) => wants.includes(d.type)) ?? cur.devices[0];
       const track = {
         id: newClipId(),
@@ -926,6 +930,8 @@ export function Timeline({
                     ['dmx', 'DMX'],
                     ['relay', 'Relay'],
                     ['servo', 'Servo'],
+                    ['pixel', 'Pixel (LED)'],
+                    ['eyes', 'Eyes'],
                   ] as const
                 ).map(([t, label]) => (
                   <button
@@ -1102,6 +1108,10 @@ function defaultClipFor(type: string): { durationMs: number; data: Record<string
           ],
         },
       };
+    case 'pixel':
+      return { durationMs: 2000, data: { animation: 'glow', color: '#FF6A00', brightness: 220 } };
+    case 'eyes':
+      return { durationMs: 2000, data: { animation: 'idle', color: '#AFA9EC' } };
     default:
       // Plugin track types (wled/http/udp/…): empty payload; the plugin's
       // inspector + summary guide the user to fill it in.

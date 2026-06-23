@@ -141,7 +141,7 @@ function drawClips(ctx: CanvasRenderingContext2D, s: RenderState) {
     // Plugin tracks use the owning plugin's brand colour, if registered.
     const plugin = pluginRegistry.forTrackType(track.type);
     const colors = trackColor(track.type);
-    const accent = plugin?.color ?? colors.accent;
+    const trackAccent = plugin?.color ?? colors.accent;
 
     // Gentle hint on empty lanes (approachable onboarding).
     if (track.clips.length === 0) {
@@ -160,6 +160,9 @@ function drawClips(ctx: CanvasRenderingContext2D, s: RenderState) {
       const h = LAYOUT.trackHeight - 14;
       const r = 7;
       const selected = selection.has(clip.id);
+      // Pixel/eyes clips are tinted with their own colour so the lane reads like
+      // the light it drives.
+      const accent = clipColor(track.type, clip) ?? trackAccent;
 
       ctx.save();
       if (selected) {
@@ -458,5 +461,15 @@ function roundRectLeft(
 function clipLabel(type: string, data: Record<string, unknown>): string {
   if (type === 'audio' && typeof data.filename === 'string') return data.filename;
   if (type === 'plugin' && typeof data.pluginId === 'string') return data.pluginId;
+  if ((type === 'pixel' || type === 'eyes') && typeof data.animation === 'string') {
+    return `${type === 'pixel' ? 'Pixel' : 'Eyes'} · ${data.animation}`;
+  }
   return type;
+}
+
+/** Per-clip accent colour for pixel/eyes clips (their own colour), else null. */
+function clipColor(type: string, clip: { data: Record<string, unknown> }): string | null {
+  if (type !== 'pixel' && type !== 'eyes') return null;
+  const c = clip.data.color;
+  return typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c) ? c : null;
 }
