@@ -930,7 +930,7 @@ export function Timeline({
                     ['dmx', 'DMX'],
                     ['relay', 'Relay'],
                     ['servo', 'Servo'],
-                    ['pixel', 'Pixel (LED)'],
+                    ['pixel', 'VoxPixel'],
                     ['eyes', 'Eyes'],
                   ] as const
                 ).map(([t, label]) => (

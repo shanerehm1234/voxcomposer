@@ -71,8 +71,14 @@ export const PixelAnimation = z.enum(['solid', 'pulse', 'glow', 'flash', 'chase'
 export type PixelAnimation = z.infer<typeof PixelAnimation>;
 
 /**
- * Pixel (addressable LED) clip. The Master relays `data` verbatim to the prop,
- * so these field names must match the remote firmware (WS281x ring, OcularVox).
+ * VoxPixel (addressable LED) clip. The Master relays `data` verbatim to the
+ * VoxPixel Remote, so these field names must match the remote firmware.
+ *
+ * Phase 1 (today, FastLED ring): `animation` + `color` are the contract the
+ * remote reads. Phase 2 (WLED-based remote): the same clip extends with WLED
+ * state (`wledFx`/`palette`/`speed`/`intensity`) for WLED's full effect library,
+ * while `animation`+`color` stay as the simple fallback. All Phase-2 fields are
+ * optional so Phase-1 shows keep working unchanged.
  */
 export const PixelClipData = z.object({
   animation: PixelAnimation.default('solid'),
@@ -81,6 +87,15 @@ export const PixelClipData = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default('#FF6A00'),
   brightness: z.number().int().min(0).max(255).optional(),
+  // --- Phase 2 (WLED) — optional until the WLED remote ships ---
+  /** WLED effect index. */
+  wledFx: z.number().int().min(0).optional(),
+  /** WLED palette index. */
+  palette: z.number().int().min(0).optional(),
+  /** WLED effect speed (sx), 0..255. */
+  speed: z.number().int().min(0).max(255).optional(),
+  /** WLED effect intensity (ix), 0..255. */
+  intensity: z.number().int().min(0).max(255).optional(),
 });
 export type PixelClipData = z.infer<typeof PixelClipData>;
 

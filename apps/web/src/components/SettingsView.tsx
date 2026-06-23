@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { registerBuiltins } from '../plugins/builtins.js';
 import { pluginRegistry } from '../plugins/registry.js';
 import { masterWsUrl, testMasterConnection } from '../voxlink/client.js';
+import { getMasterConfig, setMasterConfig } from '../voxlink/master.js';
 import { IconCheck, IconChip, IconRefresh } from './icons.js';
 import { ViewHeader } from './DevicesView.js';
 
@@ -17,16 +18,18 @@ interface SettingsViewProps {
 export function SettingsView({ master, onReset }: SettingsViewProps) {
   const [devMode, setDevMode] = useState(false);
   const [autosave, setAutosave] = useState(true);
-  const [ip, setIp] = useState(master.ip);
-  const [port, setPort] = useState('8080');
+  const [ip, setIp] = useState(getMasterConfig().host);
+  const [port, setPort] = useState(getMasterConfig().port);
   const [testState, setTestState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
   const [testMsg, setTestMsg] = useState('');
 
   const runTest = async () => {
     if (testState === 'testing') return;
+    // Persist so "Send to Master" and live preview share the same host.
+    setMasterConfig(ip.trim(), port);
     setTestState('testing');
     setTestMsg('');
-    const result = await testMasterConnection(masterWsUrl(ip.trim(), Number(port) || 8080));
+    const result = await testMasterConnection(masterWsUrl(ip.trim(), Number(port) || 80));
     if (result.ok) {
       setTestState('ok');
       setTestMsg(
@@ -46,7 +49,8 @@ export function SettingsView({ master, onReset }: SettingsViewProps) {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl space-y-5 p-6">
           <Section title="Master Connection" desc="How Vox Composer reaches your Master station over local WiFi.">
-            <Row label="Master IP address">
+            <Row label="Master host" desc="voxmaster.local or its IP">
+
               <input
                 value={ip}
                 onChange={(e) => setIp(e.target.value)}

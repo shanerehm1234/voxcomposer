@@ -462,7 +462,7 @@ function clipLabel(type: string, data: Record<string, unknown>): string {
   if (type === 'audio' && typeof data.filename === 'string') return data.filename;
   if (type === 'plugin' && typeof data.pluginId === 'string') return data.pluginId;
   if ((type === 'pixel' || type === 'eyes') && typeof data.animation === 'string') {
-    return `${type === 'pixel' ? 'Pixel' : 'Eyes'} · ${data.animation}`;
+    return `${type === 'pixel' ? 'VoxPixel' : 'Eyes'} · ${data.animation}`;
   }
   return type;
 }

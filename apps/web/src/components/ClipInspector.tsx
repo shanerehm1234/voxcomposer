@@ -2,6 +2,7 @@ import type { VoxClip, VoxShow } from '@voxcomposer/shared';
 import { useEffect, useState } from 'react';
 import { pluginRegistry } from '../plugins/registry.js';
 import { trackColor } from '../styles/palette.js';
+import { PixelPreview } from './PixelPreview.js';
 
 /** Neck-motion presets the skull board understands per axis / for speed. */
 const AXIS_MODES = ['fixed', 'wander', 'track', 'sweep', 'nod'];
@@ -275,8 +276,15 @@ function ClipFields({
 
       {(isPixel || isEyes) && (
         <>
-          <SectionDivider>{isPixel ? 'Pixel (LED)' : 'Eyes'}</SectionDivider>
-          <div className="mt-1">
+          <SectionDivider>{isPixel ? 'VoxPixel' : 'Eyes'}</SectionDivider>
+          <div className="overflow-hidden rounded-lg border border-border/60 bg-bg/40">
+            <PixelPreview
+              animation={String(data.animation ?? 'solid')}
+              color={String(data.color ?? '#FF6A00')}
+              brightness={isPixel ? Number(data.brightness ?? 255) : 255}
+            />
+          </div>
+          <div className="mt-2.5">
             <FieldLabel>Animation</FieldLabel>
             {isPixel ? (
               <select

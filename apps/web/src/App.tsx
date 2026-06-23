@@ -25,6 +25,7 @@ import {
   parseShowBytes,
   readShowPackage,
 } from './vox/voxFile.js';
+import { sendShowToMaster } from './voxlink/master.js';
 
 const VIEWS = ['timeline', 'devices', 'media', 'settings'];
 
@@ -96,6 +97,16 @@ export function App() {
     showToast('Packaging show + audio…', 'info');
     const count = await downloadShowPackage(show);
     showToast(`Packaged ${show.name} + ${count} audio file${count === 1 ? '' : 's'}`, 'success');
+  }, [show, showToast]);
+
+  const handleSendToMaster = useCallback(async () => {
+    showToast('Sending show to the Vox Master…', 'info');
+    const r = await sendShowToMaster(show);
+    if (r.ok) {
+      showToast(`Sent “${r.name ?? show.name}” to the Master · ${r.clips ?? '?'} clips`, 'success');
+    } else {
+      showToast(r.error ?? 'Send failed', 'error');
+    }
   }, [show, showToast]);
 
   // Import a show from already-read bytes (a .vox JSON or a .zip package). Bytes
@@ -293,6 +304,7 @@ export function App() {
         onSelectView={setActiveView}
         onExport={handleExport}
         onExportPackage={() => void handleExportPackage()}
+        onSendToMaster={() => void handleSendToMaster()}
         onImport={() => fileInputRef.current?.click()}
         onInstall={canInstall ? promptInstall : undefined}
         onShowHelp={() => setShowHelp(true)}

@@ -188,7 +188,7 @@ export function makeDemoState(): DemoState {
       { name: 'Scene_02.vox', active: false },
       { name: 'Intro_scare.vox', active: false },
     ],
-    master: { connected: true, ip: '192.168.4.1' },
+    master: { connected: true, ip: 'voxmaster.local' },
   };
 }
 

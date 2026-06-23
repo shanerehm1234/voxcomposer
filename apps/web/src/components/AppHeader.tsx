@@ -16,6 +16,7 @@ interface AppHeaderProps {
   onSelectView: (view: string) => void;
   onExport: () => void;
   onExportPackage: () => void;
+  onSendToMaster: () => void;
   onImport: () => void;
   onShowHelp: () => void;
   onInstall?: () => void;
@@ -34,6 +35,7 @@ export function AppHeader({
   onSelectView,
   onExport,
   onExportPackage,
+  onSendToMaster,
   onImport,
   onInstall,
   onShowHelp,
@@ -128,6 +130,15 @@ export function AppHeader({
                   desc="Show + all audio files"
                   onClick={() => {
                     onExportPackage();
+                    setExportOpen(false);
+                  }}
+                />
+                <div className="my-1 h-px bg-border/60" />
+                <ExportItem
+                  title="Send to Vox Master ↗"
+                  desc="Upload to the connected hub"
+                  onClick={() => {
+                    onSendToMaster();
                     setExportOpen(false);
                   }}
                 />
