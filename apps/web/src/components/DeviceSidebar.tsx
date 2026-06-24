@@ -1,4 +1,7 @@
+import type { VoxDevice } from '@voxcomposer/shared';
+import { useState } from 'react';
 import type { DemoDevice, DeviceConnection } from '../demo/demoData.js';
+import { AddDeviceModal } from './AddDeviceModal.js';
 import { resolveDeviceIcon } from './icons.js';
 
 interface DeviceSidebarProps {
@@ -7,6 +10,8 @@ interface DeviceSidebarProps {
   master: { connected: boolean; ip: string };
   selectedDeviceId: string | null;
   onSelectDevice: (id: string) => void;
+  onAddDevice: (device: VoxDevice) => void;
+  onRemoveDevice: (id: string) => void;
 }
 
 function StatusDot({ connection }: { connection: DeviceConnection }) {
@@ -42,7 +47,12 @@ export function DeviceSidebar({
   master,
   selectedDeviceId,
   onSelectDevice,
+  onAddDevice,
+  onRemoveDevice,
 }: DeviceSidebarProps) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<VoxDevice | null>(null);
+
   return (
     <aside className="hidden w-60 flex-col border-r border-border/70 bg-bg2/60 md:flex">
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -56,6 +66,17 @@ export function DeviceSidebar({
               <li key={d.id}>
                 <button
                   onClick={() => onSelectDevice(d.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setEditing({
+                      id: d.id,
+                      name: d.name,
+                      type: d.type,
+                      apiVersion: d.apiVersion ?? '1.0.0',
+                    });
+                    setModalOpen(true);
+                  }}
+                  title="Right-click to edit or remove"
                   className={`group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-all duration-150 ${
                     selected
                       ? 'bg-bg3 text-text shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ring-1 ring-purple/30'
@@ -85,7 +106,14 @@ export function DeviceSidebar({
         </ul>
 
         <div className="mt-3 flex gap-2 px-3">
-          <SidebarButton>+ Add device</SidebarButton>
+          <SidebarButton
+            onClick={() => {
+              setEditing(null);
+              setModalOpen(true);
+            }}
+          >
+            + Add device
+          </SidebarButton>
           <SidebarButton>Scan remotes</SidebarButton>
         </div>
 
@@ -128,13 +156,42 @@ export function DeviceSidebar({
           <span className="ml-auto font-mono text-[11px] text-muted">{master.ip}</span>
         </div>
       </div>
+
+      {modalOpen && (
+        <AddDeviceModal
+          existingIds={devices.map((d) => d.id)}
+          initial={editing ?? undefined}
+          onClose={() => setModalOpen(false)}
+          onSave={(device) => {
+            onAddDevice(device);
+            setModalOpen(false);
+          }}
+          onRemove={
+            editing
+              ? () => {
+                  onRemoveDevice(editing.id);
+                  setModalOpen(false);
+                }
+              : undefined
+          }
+        />
+      )}
     </aside>
   );
 }
 
-function SidebarButton({ children }: { children: React.ReactNode }) {
+function SidebarButton({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+}) {
   return (
-    <button className="flex-1 rounded-lg border border-border/80 bg-bg3/30 px-2 py-1.5 text-[11px] font-medium text-muted transition-colors hover:border-purple/40 hover:text-text">
+    <button
+      onClick={onClick}
+      className="flex-1 rounded-lg border border-border/80 bg-bg3/30 px-2 py-1.5 text-[11px] font-medium text-muted transition-colors hover:border-purple/40 hover:text-text"
+    >
       {children}
     </button>
   );

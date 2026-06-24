@@ -1,4 +1,4 @@
-import type { VoxClip, VoxShow } from '@voxcomposer/shared';
+import type { VoxClip, VoxDevice, VoxShow } from '@voxcomposer/shared';
 
 /** Smallest clip length a resize is allowed to produce. */
 export const MIN_CLIP_MS = 50;
@@ -51,6 +51,30 @@ export function removeTrack(show: VoxShow, trackId: string): VoxShow {
     ...show,
     modified: new Date().toISOString(),
     tracks: show.tracks.filter((t) => t.id !== trackId),
+  };
+}
+
+/**
+ * Return a new show with `device` added (or, if its id already matches an
+ * existing device, replacing it in place — supports both "add" and "edit").
+ */
+export function addDevice(show: VoxShow, device: VoxDevice): VoxShow {
+  const exists = show.devices.some((d) => d.id === device.id);
+  return {
+    ...show,
+    modified: new Date().toISOString(),
+    devices: exists
+      ? show.devices.map((d) => (d.id === device.id ? device : d))
+      : [...show.devices, device],
+  };
+}
+
+/** Return a new show with the device removed (tracks pointing to it are left as-is). */
+export function removeDevice(show: VoxShow, deviceId: string): VoxShow {
+  return {
+    ...show,
+    modified: new Date().toISOString(),
+    devices: show.devices.filter((d) => d.id !== deviceId),
   };
 }
 

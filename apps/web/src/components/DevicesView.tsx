@@ -1,6 +1,8 @@
+import type { VoxDevice } from '@voxcomposer/shared';
 import { useState } from 'react';
 import type { DemoDevice } from '../demo/demoData.js';
 import { PALETTE } from '../styles/palette.js';
+import { AddDeviceModal } from './AddDeviceModal.js';
 import {
   IconBattery,
   IconCheck,
@@ -21,7 +23,15 @@ const DEVICE_ACCENT: Record<string, string> = {
   custom: PALETTE.muted,
 };
 
-export function DevicesView({ devices }: { devices: DemoDevice[] }) {
+interface DevicesViewProps {
+  devices: DemoDevice[];
+  onAddDevice: (device: VoxDevice) => void;
+  onRemoveDevice: (id: string) => void;
+}
+
+export function DevicesView({ devices, onAddDevice, onRemoveDevice }: DevicesViewProps) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<VoxDevice | null>(null);
   const onlineDevices = devices.filter((d) => d.connection === 'online');
   const online = onlineDevices.length;
 
@@ -44,7 +54,15 @@ export function DevicesView({ devices }: { devices: DemoDevice[] }) {
         actions={
           <>
             <ScanButton />
-            <PrimaryButton icon={<IconPlus className="h-4 w-4" />}>Pair new device</PrimaryButton>
+            <PrimaryButton
+              icon={<IconPlus className="h-4 w-4" />}
+              onClick={() => {
+                setEditing(null);
+                setModalOpen(true);
+              }}
+            >
+              Add device
+            </PrimaryButton>
           </>
         }
       />
@@ -79,11 +97,38 @@ export function DevicesView({ devices }: { devices: DemoDevice[] }) {
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {devices.map((d) => (
-            <DeviceCard key={d.id} device={d} />
+            <DeviceCard
+              key={d.id}
+              device={d}
+              onConfigure={() => {
+                setEditing({ id: d.id, name: d.name, type: d.type, apiVersion: d.apiVersion ?? '1.0.0' });
+                setModalOpen(true);
+              }}
+            />
           ))}
-          <PairCard />
+          <PairCard onManualAdd={() => setModalOpen(true)} />
         </div>
       </div>
+
+      {modalOpen && (
+        <AddDeviceModal
+          existingIds={devices.map((d) => d.id)}
+          initial={editing ?? undefined}
+          onClose={() => setModalOpen(false)}
+          onSave={(device) => {
+            onAddDevice(device);
+            setModalOpen(false);
+          }}
+          onRemove={
+            editing
+              ? () => {
+                  onRemoveDevice(editing.id);
+                  setModalOpen(false);
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }
@@ -115,7 +160,7 @@ function SummaryStat({
   );
 }
 
-function DeviceCard({ device: d }: { device: DemoDevice }) {
+function DeviceCard({ device: d, onConfigure }: { device: DemoDevice; onConfigure: () => void }) {
   const accent = DEVICE_ACCENT[d.type] ?? PALETTE.muted;
   const Icon = resolveDeviceIcon(d.type, d.iconHint);
   const online = d.connection === 'online';
@@ -224,7 +269,7 @@ function DeviceCard({ device: d }: { device: DemoDevice }) {
         </span>
         <div className="flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
           <CardAction>Identify</CardAction>
-          <CardAction>Configure</CardAction>
+          <CardAction onClick={onConfigure}>Configure</CardAction>
         </div>
       </div>
     </div>
@@ -249,7 +294,7 @@ function ScanButton() {
   );
 }
 
-function PairCard() {
+function PairCard({ onManualAdd }: { onManualAdd: () => void }) {
   const [state, setState] = useState<'idle' | 'listening' | 'found'>('idle');
   const run = () => {
     if (state !== 'idle') return;
@@ -263,6 +308,12 @@ function PairCard() {
   return (
     <button
       onClick={run}
+      onContextMenu={(e) => {
+        // Scanning is simulated for now — right-click jumps straight to manual entry.
+        e.preventDefault();
+        onManualAdd();
+      }}
+      title="Click to scan, or right-click to add a device manually"
       className={`flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed text-muted transition-colors ${
         state === 'found'
           ? 'border-teal/50 text-teal-l'
@@ -362,9 +413,18 @@ function Stat({
   );
 }
 
-function CardAction({ children }: { children: React.ReactNode }) {
+function CardAction({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+}) {
   return (
-    <button className="rounded-md border border-border bg-bg3/40 px-2 py-1 text-[11px] text-muted transition-colors hover:text-text">
+    <button
+      onClick={onClick}
+      className="rounded-md border border-border bg-bg3/40 px-2 py-1 text-[11px] text-muted transition-colors hover:text-text"
+    >
       {children}
     </button>
   );
@@ -410,12 +470,17 @@ export function GhostButton({
 export function PrimaryButton({
   children,
   icon,
+  onClick,
 }: {
   children: React.ReactNode;
   icon?: React.ReactNode;
+  onClick?: () => void;
 }) {
   return (
-    <button className="flex items-center gap-2 rounded-lg bg-gradient-to-b from-purple to-purple-d px-3.5 py-1.5 text-[13px] font-semibold text-white shadow-[0_2px_12px_rgba(83,74,183,0.4)] transition-all hover:brightness-110">
+    <button
+      onClick={onClick}
+      className="flex items-center gap-2 rounded-lg bg-gradient-to-b from-purple to-purple-d px-3.5 py-1.5 text-[13px] font-semibold text-white shadow-[0_2px_12px_rgba(83,74,183,0.4)] transition-all hover:brightness-110"
+    >
       {icon}
       {children}
     </button>

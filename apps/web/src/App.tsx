@@ -1,4 +1,4 @@
-import type { VoxClip } from '@voxcomposer/shared';
+import type { VoxClip, VoxDevice } from '@voxcomposer/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppHeader } from './components/AppHeader.js';
 import { ClipInspector } from './components/ClipInspector.js';
@@ -8,8 +8,8 @@ import { MediaView } from './components/MediaView.js';
 import { SettingsView } from './components/SettingsView.js';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay.js';
 import { Toast, type ToastMessage } from './components/Toast.js';
-import { makeDemoState } from './demo/demoData.js';
-import { addClip, findClip, replaceClip } from './timeline/edits.js';
+import { type DemoDevice, makeDemoState } from './demo/demoData.js';
+import { addClip, addDevice, findClip, removeDevice, replaceClip } from './timeline/edits.js';
 import { useHistory } from './timeline/history.js';
 import { Timeline } from './timeline/Timeline.js';
 import { decodeAudioFile } from './audio/analyze.js';
@@ -56,7 +56,31 @@ export function App() {
     [show, primaryClipId],
   );
 
-  const remotesOnline = demo.devices.filter((d) => d.connection === 'online').length;
+  // The sidebar/devices view render `show.devices` (the persisted source of
+  // truth — same list +Track and the inspector read) overlaid with whatever
+  // ephemeral telemetry the demo data has for known ids. Devices added via
+  // "+ Add device" start with no telemetry, so they render as offline/unknown
+  // until a real Vox-Link scan reports status.
+  const sidebarDevices = useMemo<DemoDevice[]>(() => {
+    const telemetryById = new Map(demo.devices.map((d) => [d.id, d]));
+    return show.devices.map((d) => {
+      const t = telemetryById.get(d.id);
+      return {
+        ...d,
+        connection: t?.connection ?? 'offline',
+        iconHint: t?.iconHint,
+        rssi: t?.rssi,
+        firmware: t?.firmware,
+        battery: t?.battery,
+        sdUsedMb: t?.sdUsedMb,
+        sdTotalMb: t?.sdTotalMb,
+        fileCount: t?.fileCount,
+        lastSeen: t?.lastSeen ?? (t ? undefined : 'never'),
+      };
+    });
+  }, [show.devices, demo.devices]);
+
+  const remotesOnline = sidebarDevices.filter((d) => d.connection === 'online').length;
   const { canInstall, promptInstall } = useInstallPrompt();
 
   const editClip = useCallback(
@@ -84,6 +108,26 @@ export function App() {
   const showToast = useCallback((text: string, kind: ToastMessage['kind'] = 'info') => {
     setToast({ id: Date.now(), text, kind });
   }, []);
+
+  const handleAddDevice = useCallback(
+    (device: VoxDevice) => {
+      const isNew = !show.devices.some((d) => d.id === device.id);
+      commit(addDevice(show, device));
+      setSelectedDeviceId(device.id);
+      showToast(isNew ? `Added “${device.name}”` : `Updated “${device.name}”`, 'success');
+    },
+    [show, commit, showToast],
+  );
+
+  const handleRemoveDevice = useCallback(
+    (id: string) => {
+      const device = show.devices.find((d) => d.id === id);
+      commit(removeDevice(show, id));
+      if (selectedDeviceId === id) setSelectedDeviceId(null);
+      showToast(`Removed “${device?.name ?? id}”`, 'info');
+    },
+    [show, commit, showToast, selectedDeviceId],
+  );
 
   // --- .vox export / import -------------------------------------------------
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -331,11 +375,13 @@ export function App() {
       />
       <div className="flex min-h-0 flex-1">
         <DeviceSidebar
-          devices={demo.devices}
+          devices={sidebarDevices}
           showFiles={demo.showFiles}
           master={demo.master}
           selectedDeviceId={selectedDeviceId}
           onSelectDevice={setSelectedDeviceId}
+          onAddDevice={handleAddDevice}
+          onRemoveDevice={handleRemoveDevice}
         />
         <main className="flex min-w-0 flex-1 flex-col">
           {activeView === 'timeline' && (
@@ -347,7 +393,13 @@ export function App() {
               onNotify={showToast}
             />
           )}
-          {activeView === 'devices' && <DevicesView devices={demo.devices} />}
+          {activeView === 'devices' && (
+            <DevicesView
+              devices={sidebarDevices}
+              onAddDevice={handleAddDevice}
+              onRemoveDevice={handleRemoveDevice}
+            />
+          )}
           {activeView === 'media' && <MediaView media={demo.media} />}
           {activeView === 'settings' && (
             <SettingsView master={demo.master} onReset={handleReset} />
