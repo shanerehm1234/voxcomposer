@@ -25,7 +25,8 @@ import {
   parseShowBytes,
   readShowPackage,
 } from './vox/voxFile.js';
-import { sendShowToMaster } from './voxlink/master.js';
+import { getMasterConfig, sendShowToMaster } from './voxlink/master.js';
+import { useMasterStatus } from './voxlink/useMasterStatus.js';
 
 const VIEWS = ['timeline', 'devices', 'media', 'settings'];
 
@@ -57,14 +58,32 @@ export function App() {
   );
 
   // The sidebar/devices view render `show.devices` (the persisted source of
-  // truth — same list +Track and the inspector read) overlaid with whatever
-  // ephemeral telemetry the demo data has for known ids. Devices added via
-  // "+ Add device" start with no telemetry, so they render as offline/unknown
-  // until a real Vox-Link scan reports status.
+  // truth — same list +Track and the inspector read). While the Master is
+  // reachable, live `device_status` reports (rssi/online/ip) override demo
+  // telemetry per device; fields the Vox-Link protocol doesn't carry yet
+  // (firmware/battery/SD usage) keep falling back to the demo data so the UI
+  // still has something to show. Without a reachable Master (no hardware on
+  // hand), this is exactly the old all-demo behavior.
+  const masterStatus = useMasterStatus();
   const sidebarDevices = useMemo<DemoDevice[]>(() => {
     const telemetryById = new Map(demo.devices.map((d) => [d.id, d]));
     return show.devices.map((d) => {
       const t = telemetryById.get(d.id);
+      const live = masterStatus.devices.get(d.id);
+      if (live) {
+        return {
+          ...d,
+          connection: live.online ? 'online' : 'offline',
+          iconHint: t?.iconHint,
+          rssi: live.rssi,
+          firmware: t?.firmware,
+          battery: t?.battery,
+          sdUsedMb: t?.sdUsedMb,
+          sdTotalMb: t?.sdTotalMb,
+          fileCount: t?.fileCount,
+          lastSeen: live.online ? undefined : (t?.lastSeen ?? 'recently'),
+        };
+      }
       return {
         ...d,
         connection: t?.connection ?? 'offline',
@@ -78,7 +97,7 @@ export function App() {
         lastSeen: t?.lastSeen ?? (t ? undefined : 'never'),
       };
     });
-  }, [show.devices, demo.devices]);
+  }, [show.devices, demo.devices, masterStatus.devices]);
 
   const remotesOnline = sidebarDevices.filter((d) => d.connection === 'online').length;
   const { canInstall, promptInstall } = useInstallPrompt();
@@ -377,7 +396,7 @@ export function App() {
         <DeviceSidebar
           devices={sidebarDevices}
           showFiles={demo.showFiles}
-          master={demo.master}
+          master={{ connected: masterStatus.connected, ip: getMasterConfig().host }}
           selectedDeviceId={selectedDeviceId}
           onSelectDevice={setSelectedDeviceId}
           onAddDevice={handleAddDevice}
@@ -402,7 +421,10 @@ export function App() {
           )}
           {activeView === 'media' && <MediaView media={demo.media} />}
           {activeView === 'settings' && (
-            <SettingsView master={demo.master} onReset={handleReset} />
+            <SettingsView
+              master={{ connected: masterStatus.connected, ip: getMasterConfig().host }}
+              onReset={handleReset}
+            />
           )}
         </main>
         {activeView === 'timeline' && (
