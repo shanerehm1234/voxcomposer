@@ -128,6 +128,36 @@ export function App() {
     setToast({ id: Date.now(), text, kind });
   }, []);
 
+  // Auto-attach: pairing itself only ever happens on the Master (see
+  // docs/PAIRING.md in the VoxMaster repo — the Composer is a consumer of its
+  // roster, not a second place to pair). Once the Master reports a remote as
+  // paired, it should just show up in the current show without the user
+  // re-entering its MAC by hand. Built as one combined show update (not one
+  // commit per device) — commit() replaces `present` outright, so multiple
+  // commits in the same effect run against the same stale `show` would lose
+  // all but the last.
+  useEffect(() => {
+    const newDevices: VoxDevice[] = [];
+    for (const status of masterStatus.devices.values()) {
+      if (!status.paired) continue;
+      if (show.devices.some((d) => d.id === status.deviceId)) continue;
+      newDevices.push({
+        id: status.deviceId,
+        name: status.name || status.deviceId,
+        type: status.ip ? 'pixel' : 'custom',
+        apiVersion: '1.0.0',
+      });
+    }
+    if (newDevices.length === 0) return;
+    commit(newDevices.reduce(addDevice, show));
+    showToast(
+      newDevices.length === 1
+        ? `“${newDevices[0]!.name}” is paired on the Master — added to the show`
+        : `${newDevices.length} paired Master remotes added to the show`,
+      'success',
+    );
+  }, [masterStatus.devices, show, commit, showToast]);
+
   const handleAddDevice = useCallback(
     (device: VoxDevice) => {
       const isNew = !show.devices.some((d) => d.id === device.id);

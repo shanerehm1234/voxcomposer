@@ -46,6 +46,15 @@ export const DeviceStatusPayload = z.object({
   rssi: z.number(),
   /** LAN IP, when the remote reports one (e.g. VoxPixel/WLED) — absent otherwise. */
   ip: z.string().optional(),
+  /** The Master's friendly name for this remote, if it has one set. */
+  name: z.string().optional(),
+  /**
+   * Whether this remote is paired/attached to the Master (see VoxMaster's
+   * docs/PAIRING.md) — false for a device merely seen broadcasting a HELLO
+   * on the same LAN. Older Master firmware omits this field entirely;
+   * absence is treated the same as `false` (not attached) by callers.
+   */
+  paired: z.boolean().optional(),
 });
 export type DeviceStatusPayload = z.infer<typeof DeviceStatusPayload>;
 
