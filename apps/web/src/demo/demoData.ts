@@ -58,7 +58,7 @@ export interface DemoState {
  */
 export function makeDemoState(): DemoState {
   // Built-in plugins must be registered before the timeline renders plugin
-  // tracks (e.g. the WLED track below) so it can resolve summaries/colours.
+  // tracks so it can resolve summaries/colours.
   registerBuiltins();
   const now = new Date().toISOString();
   const show: VoxShow = {
@@ -135,11 +135,22 @@ export function makeDemoState(): DemoState {
       {
         id: 't-wled',
         deviceId: 'WLED:1',
-        type: 'wled',
+        type: 'pixel',
         label: 'Porch Pixels',
         clips: [
-          clip('c-wled-1', 800, 4000, 'wled', { host: '192.168.1.50', preset: 3, label: 'Eerie glow' }),
-          clip('c-wled-2', 8200, 1600, 'wled', { host: '192.168.1.50', preset: 7, label: 'Lightning' }),
+          // wledFx/palette/speed are the Phase-2 fields — the Master relays them
+          // verbatim to the VoxPixel remote, which applies them via WLED's own
+          // effect engine. No direct device IP involved; routing is by deviceId.
+          clip('c-wled-1', 800, 4000, 'pixel', {
+            animation: 'glow',
+            color: '#FF6A00',
+            wledFx: 3,
+          }),
+          clip('c-wled-2', 8200, 1600, 'pixel', {
+            animation: 'flash',
+            color: '#FFFFFF',
+            wledFx: 7,
+          }),
         ],
       },
       {

@@ -21,71 +21,11 @@ const fieldStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 };
 const capStyle: React.CSSProperties = { fontSize: 11, color: '#718096' };
 
-const wled: VoxPlugin = definePlugin({
-  id: 'com.wled.integration',
-  name: 'WLED',
-  version: '1.0.0',
-  author: 'Vox Composer',
-  description: 'Trigger WLED presets on a pixel track over the local network.',
-  trackType: 'wled',
-  permissions: ['network'],
-  color: '#00A2FF',
-  summarizeClip(clip) {
-    const host = str(clip, 'host');
-    const preset = num(clip, 'preset', 1);
-    const label = str(clip, 'label');
-    if (!host) return 'WLED — set node';
-    return label ? `WLED ${label}` : `WLED ${host} · ps ${preset}`;
-  },
-  onFrame(_ts, clip, api) {
-    const host = str(clip, 'host');
-    if (!host) return;
-    void api
-      .sendHTTP(`http://${host}/json/state`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ps: num(clip, 'preset', 1) }),
-      })
-      .catch((e) => api.log('WLED request failed', e));
-  },
-  renderInspector(clip, { onChange }) {
-    const host = str(clip, 'host');
-    const preset = num(clip, 'preset', 1);
-    const label = str(clip, 'label');
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <label style={labelStyle}>
-          <span style={capStyle}>WLED node</span>
-          <input
-            style={fieldStyle}
-            value={host}
-            placeholder="192.168.1.50"
-            onChange={(e) => onChange({ host: e.target.value })}
-          />
-        </label>
-        <label style={labelStyle}>
-          <span style={capStyle}>Preset slot</span>
-          <input
-            style={fieldStyle}
-            type="number"
-            min={1}
-            value={preset}
-            onChange={(e) => onChange({ preset: Math.max(1, Number(e.target.value) || 1) })}
-          />
-        </label>
-        <label style={labelStyle}>
-          <span style={capStyle}>Label (optional)</span>
-          <input
-            style={fieldStyle}
-            value={label}
-            placeholder="Lightning burst"
-            onChange={(e) => onChange({ label: e.target.value })}
-          />
-        </label>
-      </div>
-    );
-  },
-});
+// Note: there is no WLED/pixel plugin here — `pixel` is a native track/clip
+// type (see packages/shared/src/vox/clip.ts: PixelClipData), not a plugin.
+// The Master relays pixel clip data verbatim to the addressed VoxPixel remote
+// by deviceId; nothing in the Composer talks to a WLED device's IP directly.
+// See docs/PAIRING.md for why: device identity/trust lives on the Master.
 
 const genericHttp: VoxPlugin = definePlugin({
   id: 'com.voxcomposer.generic-http',
@@ -162,7 +102,7 @@ const genericUdp: VoxPlugin = definePlugin({
   },
 });
 
-export const BUILTIN_PLUGINS: VoxPlugin[] = [wled, genericHttp, genericUdp];
+export const BUILTIN_PLUGINS: VoxPlugin[] = [genericHttp, genericUdp];
 
 /** Register the built-ins once. Safe to call repeatedly. */
 export function registerBuiltins(): void {

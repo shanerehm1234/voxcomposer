@@ -120,25 +120,6 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
-  examples/plugins/wled:
-    dependencies:
-      '@voxcomposer/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../../packages/plugin-sdk
-      '@voxcomposer/shared':
-        specifier: workspace:*
-        version: link:../../../packages/shared
-    devDependencies:
-      '@types/react':
-        specifier: ^18.3.12
-        version: 18.3.31
-      react:
-        specifier: ^18.3.1
-        version: 18.3.1
-      typescript:
-        specifier: ^5.6.3
-        version: 5.9.3
-
   packages/plugin-sdk:
     dependencies:
       '@voxcomposer/shared':

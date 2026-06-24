@@ -93,8 +93,11 @@ direct when CORS allows:
 | `emitToMaster` | `master` | custom Master events |
 | `log` | — | writes to the Developer-mode console |
 
-See [`examples/plugins/wled`](examples/plugins/wled) and
-[`examples/plugins/generic-http`](examples/plugins/generic-http) for working references.
+See [`examples/plugins/generic-http`](examples/plugins/generic-http) for a working
+reference. Note: VoxPixel/WLED remotes are *not* a good fit for a plugin — `pixel`
+is a native track/clip type the Vox Master routes by device ID (see
+`docs/PAIRING.md` in the VoxMaster repo for why device identity/trust lives on
+the Master, not in a plugin talking to a device's IP directly).
 
 ## Submitting changes
 
