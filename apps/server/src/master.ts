@@ -34,11 +34,18 @@ export class MockMaster implements VoxMaster {
     { id: 'SK:02', files: ['skelly2_reply.wav'] },
     { id: 'SK:03', files: ['door_creak.wav'] },
     { id: 'FOG:1', files: [] as string[] },
+    // A VoxPixel Remote (WLED) reports its IP in its HELLO, same as real hardware.
+    { id: '68:25:DD:31:F8:3C', files: [] as string[], ip: '192.168.1.224' },
   ];
 
   scanDevices(emit: MasterEmit): void {
     for (const d of this.devices) {
-      emit.deviceStatus({ deviceId: d.id, online: true, rssi: -50 - Math.floor(Math.random() * 25) });
+      emit.deviceStatus({
+        deviceId: d.id,
+        online: true,
+        rssi: -50 - Math.floor(Math.random() * 25),
+        ...('ip' in d ? { ip: d.ip } : {}),
+      });
       emit.deviceInventory({ deviceId: d.id, files: d.files });
     }
   }

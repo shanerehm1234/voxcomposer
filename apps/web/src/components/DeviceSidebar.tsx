@@ -1,6 +1,8 @@
 import type { VoxDevice } from '@voxcomposer/shared';
 import { useState } from 'react';
 import type { DemoDevice, DeviceConnection } from '../demo/demoData.js';
+import { masterWsUrl, scanForDevices, type DiscoveredDevice } from '../voxlink/client.js';
+import { getMasterConfig } from '../voxlink/master.js';
 import { AddDeviceModal } from './AddDeviceModal.js';
 import { resolveDeviceIcon } from './icons.js';
 
@@ -52,6 +54,16 @@ export function DeviceSidebar({
 }: DeviceSidebarProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<VoxDevice | null>(null);
+  const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
+  const [scanning, setScanning] = useState(false);
+
+  const runScan = () => {
+    setScanning(true);
+    const cfg = getMasterConfig();
+    scanForDevices(masterWsUrl(cfg.host, Number(cfg.port) || 80))
+      .then(setDiscovered)
+      .finally(() => setScanning(false));
+  };
 
   return (
     <aside className="hidden w-60 flex-col border-r border-border/70 bg-bg2/60 md:flex">
@@ -110,11 +122,12 @@ export function DeviceSidebar({
             onClick={() => {
               setEditing(null);
               setModalOpen(true);
+              runScan();
             }}
           >
             + Add device
           </SidebarButton>
-          <SidebarButton>Scan remotes</SidebarButton>
+          <SidebarButton onClick={runScan}>{scanning ? 'Scanning…' : 'Scan remotes'}</SidebarButton>
         </div>
 
         <SectionLabel className="mt-6">Show Files</SectionLabel>
@@ -161,6 +174,9 @@ export function DeviceSidebar({
         <AddDeviceModal
           existingIds={devices.map((d) => d.id)}
           initial={editing ?? undefined}
+          discovered={discovered}
+          scanning={scanning}
+          onRescan={runScan}
           onClose={() => setModalOpen(false)}
           onSave={(device) => {
             onAddDevice(device);

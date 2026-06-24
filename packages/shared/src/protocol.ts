@@ -44,6 +44,8 @@ export const DeviceStatusPayload = z.object({
   online: z.boolean(),
   /** Received signal strength indicator (dBm), when connected. */
   rssi: z.number(),
+  /** LAN IP, when the remote reports one (e.g. VoxPixel/WLED) — absent otherwise. */
+  ip: z.string().optional(),
 });
 export type DeviceStatusPayload = z.infer<typeof DeviceStatusPayload>;
 

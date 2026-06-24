@@ -19,6 +19,62 @@ export interface ConnectionResult {
   error?: string;
 }
 
+/** A remote discovered via a Vox-Link `device_scan`, as reported by the Master. */
+export interface DiscoveredDevice {
+  deviceId: string;
+  rssi: number;
+  /** LAN IP, if the remote reports one (e.g. VoxPixel/WLED) — undefined otherwise. */
+  ip?: string;
+}
+
+/**
+ * Open the Vox-Link socket, send `device_scan`, and collect every remote that
+ * reports in — so the Composer can list real devices by MAC/IP instead of
+ * asking a person to type one in. Works against the mock Master (apps/server)
+ * and the real ESP-IDF firmware — same protocol.
+ */
+export function scanForDevices(url: string, gatherMs = 1200): Promise<DiscoveredDevice[]> {
+  return new Promise((resolve) => {
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+    } catch {
+      resolve([]);
+      return;
+    }
+
+    const found = new Map<string, DiscoveredDevice>();
+    let settled = false;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(failTimer);
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      resolve([...found.values()]);
+    };
+
+    const failTimer = setTimeout(finish, 4000);
+
+    ws.onopen = () => {
+      ws.send(encodeVoxLink(VOX_EVENTS.deviceScan));
+      setTimeout(finish, gatherMs);
+    };
+    ws.onmessage = (e) => {
+      const msg = decodeVoxLink(typeof e.data === 'string' ? e.data : '');
+      if (!msg || msg.event !== VOX_EVENTS.deviceStatus) return;
+      const p = msg.payload as DeviceStatusPayload;
+      if (p?.deviceId) found.set(p.deviceId, { deviceId: p.deviceId, rssi: p.rssi, ip: p.ip });
+    };
+    ws.onerror = finish;
+    ws.onclose = finish;
+  });
+}
+
 /**
  * One-shot connectivity test: open the Vox-Link socket, send `device_scan`, and
  * collect how many remotes respond. Works against the mock Master (apps/server)

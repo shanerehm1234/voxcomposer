@@ -45,12 +45,18 @@ describe('Vox-Link raw WebSocket relay (mock Master)', () => {
         const msg = decodeVoxLink(raw.toString());
         if (msg?.event === VOX_EVENTS.deviceStatus) {
           got.push(msg.payload as DeviceStatusPayload);
-          if (got.length === 4) resolve(got);
+          if (got.length === 5) resolve(got);
         }
       });
       ws.on('open', () => ws.send(encodeVoxLink(VOX_EVENTS.deviceScan)));
     });
-    expect(statuses.map((s) => s.deviceId).sort()).toEqual(['FOG:1', 'SK:01', 'SK:02', 'SK:03']);
+    expect(statuses.map((s) => s.deviceId).sort()).toEqual([
+      '68:25:DD:31:F8:3C',
+      'FOG:1',
+      'SK:01',
+      'SK:02',
+      'SK:03',
+    ]);
     ws.close();
   });
 

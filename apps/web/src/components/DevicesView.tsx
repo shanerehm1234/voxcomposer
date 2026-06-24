@@ -2,6 +2,8 @@ import type { VoxDevice } from '@voxcomposer/shared';
 import { useState } from 'react';
 import type { DemoDevice } from '../demo/demoData.js';
 import { PALETTE } from '../styles/palette.js';
+import { masterWsUrl, scanForDevices, type DiscoveredDevice } from '../voxlink/client.js';
+import { getMasterConfig } from '../voxlink/master.js';
 import { AddDeviceModal } from './AddDeviceModal.js';
 import {
   IconBattery,
@@ -32,6 +34,17 @@ interface DevicesViewProps {
 export function DevicesView({ devices, onAddDevice, onRemoveDevice }: DevicesViewProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<VoxDevice | null>(null);
+  const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
+  const [scanning, setScanning] = useState(false);
+
+  const runScan = () => {
+    setScanning(true);
+    const cfg = getMasterConfig();
+    scanForDevices(masterWsUrl(cfg.host, Number(cfg.port) || 80))
+      .then(setDiscovered)
+      .finally(() => setScanning(false));
+  };
+
   const onlineDevices = devices.filter((d) => d.connection === 'online');
   const online = onlineDevices.length;
 
@@ -53,12 +66,13 @@ export function DevicesView({ devices, onAddDevice, onRemoveDevice }: DevicesVie
         subtitle={`${devices.length} paired · ${online} online`}
         actions={
           <>
-            <ScanButton />
+            <ScanButton scanning={scanning} onScan={runScan} />
             <PrimaryButton
               icon={<IconPlus className="h-4 w-4" />}
               onClick={() => {
                 setEditing(null);
                 setModalOpen(true);
+                runScan();
               }}
             >
               Add device
@@ -106,7 +120,23 @@ export function DevicesView({ devices, onAddDevice, onRemoveDevice }: DevicesVie
               }}
             />
           ))}
-          <PairCard onManualAdd={() => setModalOpen(true)} />
+          <PairCard
+            discovered={discovered.filter((d) => !devices.some((dv) => dv.id === d.deviceId))}
+            scanning={scanning}
+            onScan={runScan}
+            onManualAdd={() => {
+              setModalOpen(true);
+              runScan();
+            }}
+            onPick={(d) => {
+              onAddDevice({
+                id: d.deviceId,
+                name: d.ip ? `VoxPixel ${d.deviceId.split(':').slice(-2).join(':')}` : `Remote ${d.deviceId}`,
+                type: d.ip ? 'pixel' : 'custom',
+                apiVersion: '1.0.0',
+              });
+            }}
+          />
         </div>
       </div>
 
@@ -114,6 +144,9 @@ export function DevicesView({ devices, onAddDevice, onRemoveDevice }: DevicesVie
         <AddDeviceModal
           existingIds={devices.map((d) => d.id)}
           initial={editing ?? undefined}
+          discovered={discovered}
+          scanning={scanning}
+          onRescan={runScan}
           onClose={() => setModalOpen(false)}
           onSave={(device) => {
             onAddDevice(device);
@@ -276,17 +309,12 @@ function DeviceCard({ device: d, onConfigure }: { device: DemoDevice; onConfigur
   );
 }
 
-function ScanButton() {
-  const [scanning, setScanning] = useState(false);
-  const run = () => {
-    if (scanning) return;
-    setScanning(true);
-    setTimeout(() => setScanning(false), 1700);
-  };
+function ScanButton({ scanning, onScan }: { scanning: boolean; onScan: () => void }) {
   return (
     <button
-      onClick={run}
-      className="flex items-center gap-2 rounded-lg border border-border/80 bg-bg3/40 px-3 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-text"
+      onClick={onScan}
+      disabled={scanning}
+      className="flex items-center gap-2 rounded-lg border border-border/80 bg-bg3/40 px-3 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-text disabled:opacity-60"
     >
       <IconRefresh className={`h-4 w-4 ${scanning ? 'animate-spin text-purple-l' : ''}`} />
       {scanning ? 'Scanning…' : 'Scan all'}
@@ -294,47 +322,73 @@ function ScanButton() {
   );
 }
 
-function PairCard({ onManualAdd }: { onManualAdd: () => void }) {
-  const [state, setState] = useState<'idle' | 'listening' | 'found'>('idle');
-  const run = () => {
-    if (state !== 'idle') return;
-    setState('listening');
-    setTimeout(() => {
-      setState('found');
-      setTimeout(() => setState('idle'), 3500);
-    }, 2200);
-  };
+/**
+ * Listens for real Vox-Link `device_scan` results (via the Master) and lets
+ * you add a discovered remote with one click — no MAC typing. Right-click (or
+ * "Don't see it?") falls back to the manual-entry modal for a remote that
+ * hasn't beaconed yet.
+ */
+function PairCard({
+  discovered,
+  scanning,
+  onScan,
+  onManualAdd,
+  onPick,
+}: {
+  discovered: DiscoveredDevice[];
+  scanning: boolean;
+  onScan: () => void;
+  onManualAdd: () => void;
+  onPick: (d: DiscoveredDevice) => void;
+}) {
+  if (discovered.length > 0) {
+    return (
+      <div className="flex min-h-[200px] flex-col gap-2 rounded-2xl border-2 border-dashed border-teal/40 p-4">
+        <span className="text-sm font-medium text-teal-l">
+          {discovered.length} remote{discovered.length > 1 ? 's' : ''} found
+        </span>
+        <div className="flex-1 space-y-1.5 overflow-y-auto">
+          {discovered.map((d) => (
+            <button
+              key={d.deviceId}
+              onClick={() => onPick(d)}
+              className="flex w-full items-center justify-between rounded-lg border border-border/70 bg-bg2/60 px-2.5 py-1.5 text-left text-[12px] hover:border-teal/50"
+            >
+              <span className="flex flex-col">
+                <span className="font-medium text-text">{d.ip ? 'VoxPixel Remote' : 'Vox-Link remote'}</span>
+                <span className="font-mono text-[10px] text-muted">
+                  {d.deviceId}
+                  {d.ip ? ` · ${d.ip}` : ''}
+                </span>
+              </span>
+              <IconCheck className="h-4 w-4 text-teal-l" />
+            </button>
+          ))}
+        </div>
+        <button onClick={onScan} className="text-[11px] text-muted hover:text-text">
+          Rescan
+        </button>
+      </div>
+    );
+  }
 
   return (
     <button
-      onClick={run}
+      onClick={onScan}
       onContextMenu={(e) => {
-        // Scanning is simulated for now — right-click jumps straight to manual entry.
         e.preventDefault();
         onManualAdd();
       }}
       title="Click to scan, or right-click to add a device manually"
-      className={`flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed text-muted transition-colors ${
-        state === 'found'
-          ? 'border-teal/50 text-teal-l'
-          : 'border-border/60 hover:border-purple/50 hover:text-purple-l'
-      }`}
+      className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border/60 text-muted transition-colors hover:border-purple/50 hover:text-purple-l"
     >
-      {state === 'listening' ? (
+      {scanning ? (
         <>
           <span className="grid h-12 w-12 place-items-center rounded-2xl border border-purple/40 bg-purple/10">
             <IconRefresh className="h-5 w-5 animate-spin text-purple-l" />
           </span>
           <span className="text-sm font-medium text-purple-l">Listening for remotes…</span>
-          <span className="text-[11px] text-muted">Hold the pair button on your remote</span>
-        </>
-      ) : state === 'found' ? (
-        <>
-          <span className="grid h-12 w-12 place-items-center rounded-2xl border border-teal/40 bg-teal/10">
-            <IconCheck className="h-5 w-5 text-teal-l" />
-          </span>
-          <span className="text-sm font-medium">Found “Crypt Skull”</span>
-          <span className="text-[11px] text-muted">Paired over Vox-Link · added to your devices</span>
+          <span className="text-[11px] text-muted">Vox-Link broadcasts itself — no pairing button needed</span>
         </>
       ) : (
         <>
@@ -343,7 +397,7 @@ function PairCard({ onManualAdd }: { onManualAdd: () => void }) {
           </span>
           <span className="text-sm font-medium">Pair a new remote</span>
           <span className="max-w-[14rem] text-center text-[11px] text-muted">
-            Put a Vox remote in pairing mode, then add it over Vox-Link
+            Power it on, then click to scan — it shows up automatically
           </span>
         </>
       )}
