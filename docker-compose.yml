@@ -1,12 +1,15 @@
-# Vox Composer self-hosted backend.
-#
-# The web app is a static SPA — serve apps/web/dist/ with your existing web
-# server (nginx, etc.). This compose runs only the local backend: project
-# storage (SQLite), audio transcoding (ffmpeg), and the live-preview relay.
+# Vox Composer — the whole local install in one container: the editor itself
+# (built into the image, served as static files) plus the local backend
+# (project storage in SQLite, audio transcoding via ffmpeg, the mock-Master
+# dev relay). See docs/HOSTING_DECISION.md for why this — not the public
+# voxcomposer.app demo — is the real path to driving a physical Vox Master:
+# a browser loaded over plain HTTP here can open ws:// to a Master on the
+# same LAN with zero restriction; an HTTPS page never can.
 #
 #   docker compose up -d --build
 #
-# Then point the editor at  http://<this-host>:8080  in Settings.
+# Then open  http://<this-host>:8080  — that's the editor. Point its
+# Settings → Master Connection at your real Master's hostname/IP.
 
 services:
   server:

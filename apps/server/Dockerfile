@@ -11,10 +11,13 @@ RUN apt-get update \
 RUN corepack enable
 WORKDIR /app
 
-# Install dependencies for the whole workspace (server + shared).
+# Install dependencies for the whole workspace (server + shared + web) and
+# build the editor's static bundle — this image serves it directly (see
+# index.ts), so customers run one container, not "this plus your own nginx".
 COPY . .
 RUN pnpm install --frozen-lockfile \
-  && pnpm --filter @voxcomposer/server db:generate
+  && pnpm --filter @voxcomposer/server db:generate \
+  && pnpm --filter @voxcomposer/web build
 
 ENV NODE_ENV=production
 ENV DATABASE_URL=file:/data/vox.db

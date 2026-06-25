@@ -1,30 +1,41 @@
 # @voxcomposer/server
 
-The local, self-hosted Vox Composer backend. Single-user, no cloud required.
+The local, self-hosted Vox Composer backend — and, since it also serves the
+built editor (see `index.ts`), the whole local install. Single-user, no cloud
+required. This is the real production path for actually driving a physical
+Vox Master; see [`../../docs/HOSTING_DECISION.md`](../../docs/HOSTING_DECISION.md)
+for why (short version: a browser loaded over HTTPS — like the public
+voxcomposer.app demo — can never open a `ws://` connection to a Master on
+your LAN; loaded from here, over plain HTTP, it can).
 
 It provides:
 
+- **The editor itself** — `apps/web`'s built static bundle, served directly.
 - **Project storage** — `.vox` shows in SQLite (a single file; swap to Postgres later for multi-user).
 - **Audio transcoding** — MP3/OGG/M4A → WAV at a device's spec via ffmpeg, cached on local disk by
   `sourceHash + spec` so re-syncing an unchanged show never reconverts.
-- **Live-preview relay** — Socket.io carrying the Vox-Link preview protocol to a Vox Master (a mock
-  Master responds today, until the real device interface is wired).
+- **A mock Master** for local dev/testing without real hardware (same raw-WS
+  Vox-Link protocol the real firmware speaks) — point the editor's Settings at
+  a real Master's hostname/IP instead for an actual show.
 
 ## Run it
 
 ```bash
 # from the repo root
-pnpm --filter @voxcomposer/server db:push   # create the SQLite schema (first run)
-pnpm --filter @voxcomposer/server dev        # http://localhost:8080
+pnpm --filter @voxcomposer/web build         # build the editor once
+pnpm --filter @voxcomposer/server db:push    # create the SQLite schema (first run)
+pnpm --filter @voxcomposer/server dev        # http://localhost:8080 — editor + API
 ```
 
-Or with Docker (includes ffmpeg), from the repo root:
+Or with Docker (includes ffmpeg, builds the editor into the image), from the repo root:
 
 ```bash
 docker compose up -d --build
 ```
 
-Then set the server URL in the editor's **Settings → Master Connection**.
+Then open `http://localhost:8080` (or `http://<this-host>:8080` from another
+device on the same LAN) — that's the editor. Point **Settings → Master
+Connection** at your real Master's hostname/IP to drive an actual show.
 
 ## API
 

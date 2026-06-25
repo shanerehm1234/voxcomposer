@@ -1,62 +1,73 @@
 # Self-hosting Vox Composer
 
-Vox Composer is designed to run on your own hardware with minimal cloud dependency. The editor is a
-static single-page app and needs **no backend** for the full editing workflow — show design, audio
-import + preview, `.vox` export/import, and offline use all run entirely in the browser.
+Vox Composer runs entirely on your own hardware, no cloud required. See
+[`HOSTING_DECISION.md`](./HOSTING_DECISION.md) for the full reasoning — short
+version: a browser can only open the unencrypted `ws://` connection a real Vox
+Master speaks if the page itself was loaded over plain HTTP. A page loaded over
+HTTPS (the public `voxcomposer.app` demo included) can never reach your Master —
+that's a browser security boundary, not a bug, and no app-side fix exists. So
+**running the local server below is how you actually drive a real show.**
 
-## Option 1 — static editor only (recommended to start)
+## Option 1 — the local server (recommended; this is the real production path)
 
-This is exactly how the public demo is hosted.
+```bash
+# from the repo root
+docker compose up -d --build
+```
+
+That's it — `http://<this-host>:8080` is the whole app: the editor, local
+`.vox` project storage (SQLite), and audio transcoding (ffmpeg). Open it from
+the same machine, or from any other device on the same network (a tablet
+backstage, a second laptop) by using that machine's address instead of
+`localhost`. Point **Settings → Master Connection** at your real Master's
+hostname/IP and it works — no mixed-content issue, because this page is plain
+HTTP.
+
+Without Docker:
+
+```bash
+pnpm install
+pnpm --filter @voxcomposer/web build          # build the editor once
+pnpm --filter @voxcomposer/server db:push     # create the SQLite schema (first run)
+pnpm --filter @voxcomposer/server dev         # http://localhost:8080
+```
+
+See [`apps/server/README.md`](../apps/server/README.md) for the full option
+list (ports, cache dir, etc. — all via [`.env.example`](../.env.example)).
+
+> **Want remote access** (editing a show from outside your home network)?
+> The Master's own [`SECURITY.md`](../../VOXMASTER/docs/SECURITY.md) already
+> answers this for the Master itself: Tailscale, not a public port. The same
+> answer extends to whichever machine is running this local server — install
+> Tailscale there too. No relay service, no extra accounts, no new attack
+> surface beyond what you already trust.
+
+## Option 2 — static editor only (preview/marketing; no real Master)
+
+This is how the public demo at `voxcomposer.app/demo` is hosted — useful for
+showing off the timeline editor with mock data, **not** for driving real
+hardware (see the warning banner the app itself shows when loaded over
+HTTPS).
 
 ```bash
 pnpm install
 pnpm --filter @voxcomposer/web build
-# serve apps/web/dist/ with any static web server:
 npx serve apps/web/dist
 #   …or copy dist/ into nginx / Caddy / Apache / Netlify / Cloudflare Pages
 ```
 
-Because the app uses **hash-based routing** and a **relative asset base** (`base: './'` in
-`vite.config.ts`), `dist/` works under any path — a domain root or a subfolder like
-`/voxcomposer/demo/` — with no server rewrite rules.
+What you get: full timeline editing, multi-track, multi-select, undo/redo,
+audio import with waveforms and local preview playback, `.vox`/show-package
+export/import, installable PWA with offline support — everything except a
+live connection to a real Master if this is served over HTTPS.
 
-What you get with the static build:
+> **Media stays local.** Imported audio lives in the browser (IndexedDB) and
+> on your local network's remotes (SD cards). Nothing is uploaded to a server
+> in this mode.
 
-- Full timeline editing, multi-track, multi-select, undo/redo
-- Audio import (`.mp3/.wav/.ogg/.m4a`) with waveforms and local preview playback
-- `.vox` export/import and full **show package** (`.zip`) export/import
-- Installable PWA with offline support and IndexedDB persistence of your shows and audio
+## Multi-user / cloud sync (future, optional, not built)
 
-> **Media stays local.** Imported audio lives in the browser (IndexedDB) and on your local
-> network's remotes (SD cards). Nothing is uploaded to a server in this mode.
-
-## Option 2 — full stack (planned)
-
-The optional backend (`apps/server`) adds user accounts, cloud project sync, live preview over
-Socket.io, file sync to remotes, and **server-side MP3 → WAV transcoding** (via ffmpeg) for remotes
-whose firmware only plays WAV. It is not built yet; this section documents the intended setup so the
-configuration is stable from day one.
-
-A single `docker-compose.yml` will spin up the full stack:
-
-- `web` — the static editor
-- `server` — Node + Express + Prisma + Socket.io
-- `postgres` — project metadata (never media)
-- `minio` — S3-compatible object storage for the small `.vox` JSON and transcoded WAV cache
-- **ffmpeg** — bundled in the server image for transcoding (it is a system binary, not an npm
-  package, so Railway/most Node hosts need a Docker layer or buildpack that includes it)
-
-All cloud services are optional and configured via environment variables (see
-[`.env.example`](../.env.example)):
-
-- **No S3 configured** → falls back to local-disk storage for the `.vox` JSON.
-- **No auth configured** → runs in single-user mode with no login.
-
-Audio is **never** stored on the VPS disk — always S3-compatible object storage — keeping the VPS
-stateless and your bandwidth bills low.
-
-## Connecting to a Vox Master
-
-Live preview and file sync talk to a **Vox Master** station on your local Wi-Fi over Socket.io. Set
-its IP in **Settings → Master Connection**. This is purely local — no internet required — and the
-Master relays timestamps and commands to the remotes over **Vox-Link**.
+`apps/server`'s SQLite-backed storage can move to Postgres, and an auth
+provider (Clerk) can be added behind environment variables, **if** multi-user
+ever becomes a real need. Both stay strictly opt-in — single-user, no-login,
+fully local is the default and the only thing that exists today.
