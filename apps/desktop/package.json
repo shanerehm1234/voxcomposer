@@ -2,11 +2,11 @@
   "name": "@voxcomposer/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Native Mac/Windows/Linux wrapper around Vox Composer — see docs/DESKTOP_PACKAGING.md. Spawns the local server (apps/server, unchanged) and opens a window pointed at it; no Docker, no separate runtime install for the customer.",
+  "description": "Native Mac/Windows/Linux build of Vox Composer — see docs/DESKTOP_PACKAGING.md. Tauri shell that serves the embedded web build over http://localhost and opens a window on it; no Docker, no Node runtime, nothing for the customer to install.",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build"
+    "bundle": "tauri build"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

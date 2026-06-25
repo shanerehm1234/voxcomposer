@@ -4,12 +4,17 @@ version = "0.1.0"
 description = "Native desktop wrapper around Vox Composer"
 edition = "2021"
 
-# Desktop-only for now (no mobile targets), so a single bin target is enough
-# — no separate cdylib/staticlib lib target needed.
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# Serves the bundled web build over http://localhost:<port> from inside the
+# app binary (uses tiny_http under the hood) — see docs/DESKTOP_PACKAGING.md
+# for WHY a plain-HTTP localhost origin (not Tauri's native tauri:// origin)
+# is what lets the editor open ws:// to a VoxMaster on the LAN. No Node, no
+# sidecar process — this IS the local server, compiled into the one binary.
+tauri-plugin-localhost = "2"
+# Picks a free TCP port at launch so we never collide with whatever else is
+# already listening on a fixed port on the customer's machine.
+portpicker = "0.1"

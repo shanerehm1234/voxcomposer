@@ -34,20 +34,23 @@ install step, which is a worth separating: this doc only addresses "how does
 the program get onto the computer," not Composer's own onboarding/UX (a
 separate, later problem, and one we have full control over since it's our UI).
 
-## The plan: a native wrapper around what we already built
+## The plan: a native wrapper around the web app we already have
 
-Don't ask the customer's machine to run Docker at all. Wrap the **same**
-`apps/server` (Express + SQLite + static-served editor — already built,
-already working, verified live) inside a native desktop app shell instead of
-launching it via `docker compose`. Customer downloads one signed file per OS,
-double-clicks it like any other app, no separate runtime, no reboot, no
-account.
+Don't ask the customer's machine to run Docker — or anything else — at all.
+Compile the existing web editor into a native desktop app (Tauri) that serves
+it locally over `http://localhost` and opens a window on it. Customer
+downloads one file per OS, double-clicks it like any other app: no separate
+runtime, no reboot, no account, no terminal. (The serving layer is a few lines
+of embedded Rust, not a bundled Node process — see "The serving layer" below
+for why that ended up being the cleaner answer.)
 
 ### Electron vs. Tauri
 
 Both let a web app — what Composer already is — run as a real desktop app
-(its own icon, dock/taskbar presence, no browser chrome needed), and both can
-spawn our existing server process internally.
+(its own icon, dock/taskbar presence, no browser chrome needed). Tauri's win
+here is bigger than just size: because it's a Rust app, the localhost server
+can live *inside* the binary as a few lines of Rust (see below), rather than
+the bundled Node child process Electron would push us toward.
 
 | | Electron | Tauri |
 |---|---|---|
@@ -66,13 +69,53 @@ community would buy us here. Not a hard commitment — Electron is the safer
 
 ### What changes vs. what doesn't
 
-- **Composer's web app (`apps/web`) doesn't change at all.** Same HTML/CSS/JS.
-- **`apps/server` doesn't change.** The wrapper just launches it instead of
-  `docker compose` doing so.
-- New: a thin native shell (Tauri project) that, on launch, starts the
-  bundled server and opens a window pointed at `http://localhost:<port>`.
-- Docker Compose stays as-is for the self-host/power-user path — this isn't a
-  replacement, it's a second on-ramp for a different customer.
+- **Composer's web app (`apps/web`) doesn't change at all.** Same HTML/CSS/JS,
+  still runs unmodified in a plain browser (for dev/the demo) *and* inside the
+  desktop app — identical code, because both load it from an `http://localhost`
+  origin.
+- New: a thin Tauri shell (`apps/desktop`) that embeds the web build and, at
+  launch, serves it over `http://localhost:<port>` from *inside the binary*,
+  then opens a window there.
+- Docker Compose + `apps/server` (Node) stay as-is for the self-host/power-user
+  path — this isn't a replacement, it's a second on-ramp for a different
+  customer.
+
+### The serving layer: embedded Rust, not a bundled Node process
+
+> **Updated after a second-opinion round** (two external LLM reviews + the
+> realization that the editor uses IndexedDB and talks straight to the Master,
+> so the Node server's storage/transcode APIs aren't even used by the editor
+> yet). The first sketch here was "bundle the existing Node `apps/server` as a
+> self-contained binary (Prisma → `node:sqlite` → esbuild → Node SEA) and
+> spawn it as a Tauri *sidecar*." That works, but it's a lot of fragile
+> machinery (~100MB Node binary, a child process to babysit, a bundling
+> pipeline to maintain).
+
+Since the app is **already a Rust binary** (that's what Tauri is), the local
+server doesn't need to be Node at all. The desktop app uses
+[`tauri-plugin-localhost`](https://github.com/tauri-apps/tauri-plugin-localhost),
+which serves the embedded web build over `http://localhost:<port>` from inside
+the app process — a few lines of Rust, no child process, no IPC. That deletes
+the entire Node-bundling problem: **no Node, no pnpm, no Prisma, no
+`node:sqlite`, no esbuild, no Node SEA, no sidecar lifecycle.** One executable.
+
+Why `http://localhost` specifically, and not just let the webview talk to the
+Master from its native origin? Because a Tauri webview's native origin
+(`tauri://localhost`, or `http://tauri.localhost` on Windows) is treated as a
+**secure context**, which re-triggers the same mixed-content block on `ws://`
+that started this whole saga — platform-dependent and fragile. A plain-HTTP
+**loopback** origin (`http://localhost:<port>`) is the one origin that
+reliably permits `ws://` to a LAN device on every platform; it's exactly what
+every local dev server (Vite's own hot-reload included) relies on. So the
+embedded localhost server isn't a workaround — it's the deterministic
+cross-platform compatibility layer, and it costs almost nothing.
+
+Project storage and audio transcoding (the things `apps/server` adds beyond
+serving files) aren't needed by the desktop app today — the editor persists to
+the webview's IndexedDB and drives the Master directly. When local file-based
+storage *is* wanted, Tauri's native filesystem APIs (Rust commands) are a
+better fit than an embedded HTTP API anyway. The Node `apps/server` remains the
+right home for those features on the headless/NAS self-host path.
 
 ## Releases: automated via CI
 
@@ -95,22 +138,27 @@ Both Electron and Tauri have mature tooling for exactly this:
 
 ## Suggested sequencing
 
-1. ✅ **Scaffolded** — `apps/desktop` (Tauri v2). Spawns `apps/server`
-   unchanged, opens a window at `http://localhost:8080`. See its own
-   [`README.md`](../apps/desktop/README.md) for exact setup/run steps per OS.
+1. ✅ **Scaffolded** — `apps/desktop` (Tauri v2 + `tauri-plugin-localhost`).
+   Embeds the web build, serves it at `http://localhost:<port>` from inside
+   the binary, opens a window there. No Node at runtime. See its own
+   [`README.md`](../apps/desktop/README.md) for exact build/run steps per OS.
    Written without a Rust toolchain available to compile-check it against —
-   real but expected risk of a small API fix needed on first build; the
-   architecture (spawn server, poll until it's listening, open a plain-HTTP
-   window) is the part that matters and doesn't change even if a method name
-   needs adjusting.
-2. **Next**: actually run it — `pnpm dev` from `apps/desktop` on a real
-   machine with the Rust toolchain + platform webview deps installed (Linux
-   and Windows, per the README; no Mac available to test yet) — confirm a
-   real VoxMaster shows up exactly like it does from a browser today.
-3. Once confirmed working: a GitHub Actions workflow building unsigned dev
-   artifacts for all three platforms, still without spending on certificates.
-4. Only after that's solid: Apple Developer account + Windows signing cert,
-   real signed/auto-updating releases.
+   real but expected risk of a small API fix on first `cargo` build (a builder
+   method name, or a capability needed to navigate to the localhost URL); the
+   architecture (serve at http://localhost, open a window there) is what
+   matters and doesn't change even if a detail needs adjusting.
+2. **Next — the decisive test**: `pnpm dev` from `apps/desktop` on a real
+   machine (Linux, then the Windows laptop — no Mac available yet), point
+   Settings at a real VoxMaster, and confirm a device shows up. This is the
+   one thing the whole approach rests on: that a `http://localhost` origin in
+   the native webview can open `ws://` to the LAN. Expected to work (it's how
+   every local dev server behaves), but it's the assumption worth proving
+   first on each platform before building anything on top.
+3. Once confirmed working: a GitHub Actions workflow building unsigned
+   installers for all three platforms on tag push (Tauri's official
+   `tauri-action` does this), still without spending on certificates.
+4. Only after that's solid: Apple Developer account + Windows signing cert +
+   Tauri's built-in updater, for real signed/auto-updating releases.
 
 Composer's own feature development doesn't need to pause for any of this —
 the wrapper just embeds whatever `apps/web`/`apps/server` look like at build
