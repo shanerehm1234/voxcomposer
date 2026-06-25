@@ -12,11 +12,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: {
-          DEFAULT: PALETTE.bg,
-          2: PALETTE.bg2,
-          3: PALETTE.bg3,
-        },
+        bg: PALETTE.bg,
+        // Tailwind hyphenates nested shade keys (bg.2 -> "bg-bg-2"), but the
+        // whole app was written assuming "bg-bg2"/"bg-bg3" (no hyphen) — so
+        // bg2/bg3 must be top-level color keys, not shades nested under bg,
+        // or every bg-bg2/bg-bg3 utility in the app silently does nothing
+        // (exactly what made the Add Device modal's card fully transparent —
+        // no fallback background behind it, unlike most other bg-bg2 users
+        // which happened to have a parent bg-bg showing through).
+        bg2: PALETTE.bg2,
+        bg3: PALETTE.bg3,
         purple: {
           DEFAULT: PALETTE.purple,
           l: PALETTE.purpleL,
