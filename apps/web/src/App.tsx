@@ -35,6 +35,13 @@ function readViewFromHash(): string {
   return VIEWS.includes(h) ? h : 'timeline';
 }
 
+// Browsers block an HTTPS page from opening a plaintext ws:// connection
+// (mixed content) — no permission prompt, no override. That's exactly the
+// case for the hosted demo (https://voxcomposer.app) trying to reach a
+// local Vox Master, which only ever speaks ws://. Computed once; the
+// protocol doesn't change without a full page reload.
+const isHttpsOrigin = window.location.protocol === 'https:';
+
 export function App() {
   const demo = useMemo(() => makeDemoState(), []);
   const { state: show, commit, set, undo, redo } = useHistory(demo.show);
@@ -391,6 +398,13 @@ export function App() {
 
   return (
     <div className="flex h-screen flex-col bg-bg text-text">
+      {isHttpsOrigin && (
+        <div className="shrink-0 bg-purple-d px-4 py-2 text-center text-xs text-text">
+          Running over HTTPS (e.g. the hosted voxcomposer.app demo) — browsers block the
+          unencrypted ws:// connection a local Vox Master uses, so devices won't show up here. For
+          a real show, run Composer on the same network as the Master over plain HTTP.
+        </div>
+      )}
       <AppHeader
         remotesOnline={remotesOnline}
         activeView={activeView}

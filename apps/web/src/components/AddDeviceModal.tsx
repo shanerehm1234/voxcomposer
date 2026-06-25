@@ -173,7 +173,7 @@ export function AddDeviceModal({
               className="w-full rounded-lg border border-border/70 bg-bg/50 px-3 py-1.5 text-[13px] text-text placeholder:text-muted focus:border-purple/50 focus:outline-none"
             />
           </Field>
-          {(isEdit || manualEntry || !id) && (
+          {(isEdit || manualEntry || (!id && pickable.length === 0 && !scanning)) && (
             <Field label="MAC address" desc="The remote's WiFi MAC — its Vox-Link identity.">
               <input
                 value={id}
