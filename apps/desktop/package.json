@@ -1,0 +1,14 @@
+{
+  "name": "@voxcomposer/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native Mac/Windows/Linux wrapper around Vox Composer — see docs/DESKTOP_PACKAGING.md. Spawns the local server (apps/server, unchanged) and opens a window pointed at it; no Docker, no separate runtime install for the customer.",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

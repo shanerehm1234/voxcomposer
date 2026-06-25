@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Vox Composer",
+  "version": "0.1.0",
+  "identifier": "com.voxcomposer.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @voxcomposer/web build",
+    "beforeBuildCommand": "pnpm --filter @voxcomposer/web build",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  }
+}

@@ -95,14 +95,22 @@ Both Electron and Tauri have mature tooling for exactly this:
 
 ## Suggested sequencing
 
-1. Scaffold the Tauri project + a GitHub Actions workflow that builds
-   **unsigned** dev builds for all three platforms. Proves the whole pipeline
-   (download → double-click → talks to a real Master) end-to-end without
-   spending money on certificates yet.
-2. Validate it against real hardware (exactly the kind of test this whole
-   thread started from).
-3. Once the direction is confirmed working, get the Apple Developer account +
-   Windows signing cert and wire up real signed/auto-updating releases.
+1. ✅ **Scaffolded** — `apps/desktop` (Tauri v2). Spawns `apps/server`
+   unchanged, opens a window at `http://localhost:8080`. See its own
+   [`README.md`](../apps/desktop/README.md) for exact setup/run steps per OS.
+   Written without a Rust toolchain available to compile-check it against —
+   real but expected risk of a small API fix needed on first build; the
+   architecture (spawn server, poll until it's listening, open a plain-HTTP
+   window) is the part that matters and doesn't change even if a method name
+   needs adjusting.
+2. **Next**: actually run it — `pnpm dev` from `apps/desktop` on a real
+   machine with the Rust toolchain + platform webview deps installed (Linux
+   and Windows, per the README; no Mac available to test yet) — confirm a
+   real VoxMaster shows up exactly like it does from a browser today.
+3. Once confirmed working: a GitHub Actions workflow building unsigned dev
+   artifacts for all three platforms, still without spending on certificates.
+4. Only after that's solid: Apple Developer account + Windows signing cert,
+   real signed/auto-updating releases.
 
 Composer's own feature development doesn't need to pause for any of this —
 the wrapper just embeds whatever `apps/web`/`apps/server` look like at build

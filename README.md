@@ -35,7 +35,10 @@ over Wi-Fi to drive the remotes via **Vox-Link**.
 ```
 apps/
   web/            React 18 + TS + Vite + Tailwind PWA — the editor
-  server/         Node + Express + Prisma + Socket.io (planned)
+  server/         Node + Express + Prisma + SQLite — the local self-hosted backend
+                  (serves apps/web's build too — see docs/HOSTING_DECISION.md)
+  desktop/        Tauri wrapper around the above — no Docker/terminal for the
+                  customer (see docs/DESKTOP_PACKAGING.md; early/dev-grade)
 packages/
   shared/         The .vox schema (zod-first), Vox-Link protocol, migrations
   plugin-sdk/     Plugin SDK published to npm
@@ -62,7 +65,21 @@ pnpm lint
 
 ## Quick start (self-hosting)
 
-The editor is a static SPA and needs no backend for the full editing workflow. To host the demo:
+**To actually drive a real Vox Master, run the local server — see
+[`docs/self-hosting.md`](docs/self-hosting.md):**
+
+```bash
+docker compose up -d --build   # editor + local storage + transcoding, one container
+```
+
+A page loaded over HTTPS (e.g. a publicly hosted static build) can never open
+the plain `ws://` connection a real Master speaks — that's a browser security
+boundary, not a bug. Running the app from a local server over plain HTTP is
+what makes the live connection actually work; see
+[`docs/HOSTING_DECISION.md`](docs/HOSTING_DECISION.md) for the full reasoning.
+
+A static-only build (no backend, no real Master, mock data) is still useful
+for previewing the editor itself:
 
 ```bash
 pnpm --filter @voxcomposer/web build
@@ -70,8 +87,7 @@ pnpm --filter @voxcomposer/web build
 ```
 
 Because the app uses hash-based routing and a relative asset base (`base: './'`), it works under any
-subpath with no server rewrites. Cloud sync, accounts, and media transcoding are additive and live
-in `apps/server` (not built yet) — see `docs/self-hosting.md` when it lands.
+subpath with no server rewrites.
 
 > **Media stays local by design.** Audio lives in the browser (IndexedDB) and on the local network
 > (Master → SD cards). The server only ever stores the small `.vox` JSON — no media bandwidth bills.

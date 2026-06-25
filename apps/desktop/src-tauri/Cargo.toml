@@ -1,0 +1,15 @@
+[package]
+name = "voxcomposer-desktop"
+version = "0.1.0"
+description = "Native desktop wrapper around Vox Composer"
+edition = "2021"
+
+# Desktop-only for now (no mobile targets), so a single bin target is enough
+# — no separate cdylib/staticlib lib target needed.
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
