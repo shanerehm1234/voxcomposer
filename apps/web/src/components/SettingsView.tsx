@@ -40,8 +40,21 @@ export function SettingsView({ master, onReset }: SettingsViewProps) {
       setTestState('fail');
       setTestMsg(result.error ?? 'Connection failed');
     }
-    setTimeout(() => setTestState('idle'), 6000);
+    // Drop back to 'idle' so the Status pill follows the LIVE connection
+    // (master.connected) again rather than freezing on this one-shot result.
+    // Clear the detail message at the same time.
+    setTimeout(() => {
+      setTestState('idle');
+      setTestMsg('');
+    }, 6000);
   };
+
+  // The Status pill reflects the live heartbeat connection by default, and only
+  // shows "Testing…" while an explicit test is mid-flight. (Before, it sat on
+  // the last one-shot test result and decayed to "Unknown" — which looked like
+  // a dropped connection even while the Master was perfectly connected.)
+  const pillState: 'testing' | 'ok' | 'fail' =
+    testState === 'testing' ? 'testing' : master.connected ? 'ok' : 'fail';
 
   return (
     <div className="flex h-full flex-col">
@@ -67,19 +80,23 @@ export function SettingsView({ master, onReset }: SettingsViewProps) {
             <Row label="Status">
               <span
                 className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium ${
-                  testState === 'ok'
+                  pillState === 'ok'
                     ? 'bg-teal/12 text-teal-l ring-1 ring-inset ring-teal/25'
-                    : testState === 'fail'
+                    : pillState === 'fail'
                       ? 'bg-[#E8623D]/12 text-[#E8623D] ring-1 ring-inset ring-[#E8623D]/25'
                       : 'bg-bg3/50 text-muted ring-1 ring-inset ring-border'
                 }`}
               >
                 <span
                   className={`h-1.5 w-1.5 rounded-full ${
-                    testState === 'ok' ? 'bg-teal' : testState === 'fail' ? 'bg-[#E8623D]' : 'bg-muted'
+                    pillState === 'ok'
+                      ? 'bg-teal'
+                      : pillState === 'fail'
+                        ? 'bg-[#E8623D]'
+                        : 'bg-muted animate-pulse'
                   }`}
                 />
-                {testState === 'ok' ? 'Connected' : testState === 'fail' ? 'Disconnected' : 'Unknown'}
+                {pillState === 'ok' ? 'Connected' : pillState === 'fail' ? 'Disconnected' : 'Testing…'}
               </span>
             </Row>
             {testMsg && (
