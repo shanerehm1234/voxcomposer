@@ -6,6 +6,7 @@ import {
   IconMedia,
   IconPlay,
   IconPlus,
+  IconSchedule,
   IconSettings,
   IconTimeline,
 } from './icons.js';
@@ -29,6 +30,7 @@ const NAV = [
   { id: 'timeline', label: 'Timeline', Icon: IconTimeline },
   { id: 'devices', label: 'Devices', Icon: IconDevices },
   { id: 'media', label: 'Media', Icon: IconMedia },
+  { id: 'schedule', label: 'Schedule', Icon: IconSchedule },
   { id: 'settings', label: 'Settings', Icon: IconSettings },
 ] as const;
 

@@ -100,6 +100,14 @@ export const IconDevices = (p: IconProps) => (
 
 export const IconMedia = (p: IconProps) => <IconMusic {...p} />;
 
+export const IconSchedule = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="13" r="8" />
+    <path d="M12 9v4l3 2" />
+    <path d="M9 2h6" />
+  </svg>
+);
+
 export const IconSettings = (p: IconProps) => (
   <svg {...base(p)}>
     <circle cx="12" cy="12" r="3" />

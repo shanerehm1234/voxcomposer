@@ -5,6 +5,7 @@ import { ClipInspector } from './components/ClipInspector.js';
 import { DeviceSidebar } from './components/DeviceSidebar.js';
 import { DevicesView } from './components/DevicesView.js';
 import { MediaView } from './components/MediaView.js';
+import { ScheduleView } from './components/ScheduleView.js';
 import { SettingsView } from './components/SettingsView.js';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay.js';
 import { Toast, type ToastMessage } from './components/Toast.js';
@@ -28,7 +29,7 @@ import {
 import { getMasterConfig, sendShowToMaster } from './voxlink/master.js';
 import { useMasterStatus } from './voxlink/useMasterStatus.js';
 
-const VIEWS = ['timeline', 'devices', 'media', 'settings'];
+const VIEWS = ['timeline', 'devices', 'media', 'schedule', 'settings'];
 
 function readViewFromHash(): string {
   const h = window.location.hash.slice(1);
@@ -482,6 +483,7 @@ export function App() {
             />
           )}
           {activeView === 'media' && <MediaView media={demo.media} />}
+          {activeView === 'schedule' && <ScheduleView onNotify={showToast} />}
           {activeView === 'settings' && (
             <SettingsView
               master={{ connected: masterStatus.connected, ip: getMasterConfig().host }}

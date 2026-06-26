@@ -70,3 +70,112 @@ export async function playOnMaster(): Promise<boolean> {
     return false;
   }
 }
+
+export interface LibraryShow {
+  slug: string;
+  name: string;
+  clips: number;
+  durationMs: number;
+  active: boolean;
+}
+
+/** List the shows saved in the Master's library (`GET /shows`) — used to populate the playlist editor. */
+export async function listMasterShows(): Promise<LibraryShow[]> {
+  try {
+    const res = await fetch(`${masterHttpBase()}/shows`);
+    if (!res.ok) return [];
+    return (await res.json().catch(() => [])) as LibraryShow[];
+  } catch {
+    return [];
+  }
+}
+
+// --- Scheduler (vox_schedule on the Master — see VOXMASTER's docs/SCHEDULER.md) ---
+// Same shape as the firmware's voxschedule::Schedule::serialize()/parse():
+//   { version, playlists: [{name, showSlugs[], loop}],
+//     entries: [{id, label, playlist, days[], startSec, endSec, enabled}] }
+// `days` are lowercase 3-letter names ("sun".."sat").
+
+export type ScheduleDay = 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat';
+
+export interface SchedulePlaylist {
+  name: string;
+  showSlugs: string[];
+  loop: boolean;
+}
+
+export interface ScheduleEntry {
+  id: string;
+  label: string;
+  playlist: string;
+  days: ScheduleDay[];
+  startSec: number;
+  endSec: number;
+  enabled: boolean;
+}
+
+export interface VoxSchedule {
+  version: string;
+  playlists: SchedulePlaylist[];
+  entries: ScheduleEntry[];
+}
+
+export function emptySchedule(): VoxSchedule {
+  return { version: '1.0.0', playlists: [], entries: [] };
+}
+
+/** Fetch the schedule currently stored on the Master (`GET /schedule`); an empty schedule if none is stored yet. */
+export async function getScheduleFromMaster(): Promise<VoxSchedule> {
+  try {
+    const res = await fetch(`${masterHttpBase()}/schedule`);
+    if (!res.ok) return emptySchedule();
+    return (await res.json().catch(() => emptySchedule())) as VoxSchedule;
+  } catch {
+    return emptySchedule();
+  }
+}
+
+/** Push a schedule document to the Master (`POST /schedule`); the Master validates it before storing. */
+export async function sendScheduleToMaster(
+  schedule: VoxSchedule,
+): Promise<{ ok: boolean; error?: string }> {
+  const url = `${masterHttpBase()}/schedule`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(schedule),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { ok: false, error: (body as { error?: string }).error ?? `Master returned HTTP ${res.status}` };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'Could not reach the Master — check the host in Settings' };
+  }
+}
+
+/** Clear the schedule stored on the Master (`DELETE /schedule`). */
+export async function clearScheduleOnMaster(): Promise<boolean> {
+  try {
+    const res = await fetch(`${masterHttpBase()}/schedule`, { method: 'DELETE' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Pause/resume the Master's resolver (`POST /schedule/override {"on":bool}`) — "play this now, ignore the schedule." */
+export async function setScheduleOverride(on: boolean): Promise<boolean> {
+  try {
+    const res = await fetch(`${masterHttpBase()}/schedule/override`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ on }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
