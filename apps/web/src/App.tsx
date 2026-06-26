@@ -109,6 +109,10 @@ export function App() {
   const remotesOnline = sidebarDevices.filter((d) => d.connection === 'online').length;
   const { canInstall, promptInstall } = useInstallPrompt();
 
+  // "Output to Pixels"-style live preview: while on, the Timeline streams
+  // the clips at the playhead to the real Master/remotes as preview_frames.
+  const [livePreviewOn, setLivePreviewOn] = useState(false);
+
   const editClip = useCallback(
     (next: VoxClip) => commit(replaceClip(show, next.id, next)),
     [commit, show],
@@ -134,6 +138,16 @@ export function App() {
   const showToast = useCallback((text: string, kind: ToastMessage['kind'] = 'info') => {
     setToast({ id: Date.now(), text, kind });
   }, []);
+
+  const toggleLivePreview = useCallback(() => {
+    setLivePreviewOn((wasOn) => {
+      const turningOn = !wasOn;
+      if (turningOn && !masterStatus.connected) {
+        showToast('Live preview armed — will stream once a Master is reachable', 'info');
+      }
+      return turningOn;
+    });
+  }, [masterStatus.connected, showToast]);
 
   // Auto-attach: pairing itself only ever happens on the Master (see
   // docs/PAIRING.md in the VoxMaster repo — the Composer is a consumer of its
@@ -415,6 +429,8 @@ export function App() {
         onImport={() => fileInputRef.current?.click()}
         onInstall={canInstall ? promptInstall : undefined}
         onShowHelp={() => setShowHelp(true)}
+        livePreviewOn={livePreviewOn}
+        onToggleLivePreview={toggleLivePreview}
       />
       <input
         ref={fileInputRef}
@@ -454,6 +470,8 @@ export function App() {
               onSelectClips={setSelectedClipIds}
               onCommit={commit}
               onNotify={showToast}
+              livePreviewOn={livePreviewOn}
+              sendToMaster={masterStatus.send}
             />
           )}
           {activeView === 'devices' && (

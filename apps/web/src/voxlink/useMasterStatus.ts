@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { decodeVoxLink, encodeVoxLink, VOX_EVENTS, type DeviceStatusPayload } from '@voxcomposer/shared';
 import { masterWsUrl } from './client.js';
 import { getMasterConfig, masterHttpBase } from './master.js';
@@ -13,6 +13,13 @@ export interface MasterStatus {
   connected: boolean;
   /** Latest `device_status` per device ID, as reported by the Master. */
   devices: Map<string, DeviceStatusPayload>;
+  /**
+   * Send a Vox-Link event over the live socket (e.g. `preview_frame`). Reuses
+   * the same connection this hook keeps open for `device_status`, instead of
+   * every feature that wants to talk to the Master opening its own socket.
+   * Returns false (no-op) if the socket isn't currently open.
+   */
+  send: (event: string, payload?: unknown) => boolean;
 }
 
 /**
@@ -51,6 +58,7 @@ export function useMasterStatus(): MasterStatus {
   const [devices, setDevices] = useState<Map<string, DeviceStatusPayload>>(new Map());
   const devicesRef = useRef(devices);
   devicesRef.current = devices;
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +74,7 @@ export function useMasterStatus(): MasterStatus {
         ws = null;
         return;
       }
+      wsRef.current = ws;
       ws.onopen = () => ws?.send(encodeVoxLink(VOX_EVENTS.deviceScan));
       ws.onmessage = (e) => {
         const msg = decodeVoxLink(typeof e.data === 'string' ? e.data : '');
@@ -90,6 +99,7 @@ export function useMasterStatus(): MasterStatus {
         /* ignore */
       }
       ws = null;
+      wsRef.current = null;
     };
 
     const tick = async () => {
@@ -121,5 +131,12 @@ export function useMasterStatus(): MasterStatus {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { connected, devices };
+  const send = useCallback((event: string, payload?: unknown): boolean => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(encodeVoxLink(event, payload));
+    return true;
+  }, []);
+
+  return { connected, devices, send };
 }

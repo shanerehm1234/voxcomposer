@@ -20,6 +20,9 @@ interface AppHeaderProps {
   onImport: () => void;
   onShowHelp: () => void;
   onInstall?: () => void;
+  /** Whether the timeline is currently streaming live clip states to the Master. */
+  livePreviewOn: boolean;
+  onToggleLivePreview: () => void;
 }
 
 const NAV = [
@@ -39,6 +42,8 @@ export function AppHeader({
   onImport,
   onInstall,
   onShowHelp,
+  livePreviewOn,
+  onToggleLivePreview,
 }: AppHeaderProps) {
   const [exportOpen, setExportOpen] = useState(false);
   return (
@@ -171,12 +176,25 @@ export function AppHeader({
         </button>
 
         <button
-          title="Stream this show live to the remotes over Vox-Link"
+          onClick={onToggleLivePreview}
+          title="Stream the clips at the playhead to the real remotes over Vox-Link, like xLights' Output to Pixels"
           aria-label="Preview live"
-          className="flex items-center gap-2 rounded-lg bg-gradient-to-b from-purple to-purple-d px-3.5 py-1.5 text-[13px] font-semibold text-white shadow-[0_2px_12px_rgba(83,74,183,0.4)] transition-all hover:shadow-[0_2px_18px_rgba(83,74,183,0.6)] hover:brightness-110"
+          aria-pressed={livePreviewOn}
+          className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-[13px] font-semibold text-white shadow-[0_2px_12px_rgba(83,74,183,0.4)] transition-all hover:brightness-110 ${
+            livePreviewOn
+              ? 'bg-gradient-to-b from-[#E8623D] to-[#a83a1f] hover:shadow-[0_2px_18px_rgba(232,98,61,0.6)]'
+              : 'bg-gradient-to-b from-purple to-purple-d hover:shadow-[0_2px_18px_rgba(83,74,183,0.6)]'
+          }`}
         >
-          <IconPlay className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Preview live</span>
+          {livePreviewOn ? (
+            <span className="relative flex h-3.5 w-3.5 items-center justify-center">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-50" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
+            </span>
+          ) : (
+            <IconPlay className="h-3.5 w-3.5" />
+          )}
+          <span className="hidden sm:inline">{livePreviewOn ? 'Live — On' : 'Preview live'}</span>
         </button>
       </div>
     </header>

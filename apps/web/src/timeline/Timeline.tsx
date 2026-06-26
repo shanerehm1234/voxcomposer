@@ -1,4 +1,4 @@
-import type { VoxClip, VoxShow } from '@voxcomposer/shared';
+import { VOX_EVENTS, type VoxClip, type VoxShow } from '@voxcomposer/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startPlayback, stopPlayback } from '../audio/engine.js';
 import { isAcceptedAudio } from '../audio/format.js';
@@ -29,6 +29,7 @@ import {
   type DragMode,
 } from './edits.js';
 import { clipAtPoint, clipsInRect } from './hitTest.js';
+import { resolveActiveClipStates } from './livePreview.js';
 import { drawTimeline, trackIndexAtY, trackTop, type RenderState } from './render.js';
 import { formatTimecode } from './ruler.js';
 import {
@@ -50,6 +51,15 @@ interface TimelineProps {
   onCommit: (next: VoxShow) => void;
   /** Surface a brief status message (e.g. where a dropped clip landed). */
   onNotify?: (text: string, kind?: 'info' | 'success' | 'error') => void;
+  /**
+   * Stream the clips active at the playhead to the real Master/remotes as
+   * `preview_frame`s — the "Output to Pixels"-style live preview toggle in
+   * the header. `sendToMaster` is `useMasterStatus()`'s `send`; it already
+   * no-ops when the Master isn't reachable, so this is safe to enable with
+   * no hardware connected.
+   */
+  livePreviewOn?: boolean;
+  sendToMaster?: (event: string, payload?: unknown) => boolean;
 }
 
 /**
@@ -64,6 +74,8 @@ export function Timeline({
   onSelectClips,
   onCommit,
   onNotify,
+  livePreviewOn = false,
+  sendToMaster,
 }: TimelineProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -76,6 +88,11 @@ export function Timeline({
   // Frame-rate state (refs — no re-render).
   const viewportRef = useRef<Viewport>({ pxPerMs: 0.05, scrollMs: 0 });
   const playheadRef = useRef(0);
+  const livePreviewOnRef = useRef(livePreviewOn);
+  livePreviewOnRef.current = livePreviewOn;
+  const sendToMasterRef = useRef(sendToMaster);
+  sendToMasterRef.current = sendToMaster;
+  const lastPreviewSendRef = useRef(0);
   const playingRef = useRef(false);
   const lastTickRef = useRef(0);
   const sizeRef = useRef({ width: 0, height: 0, dpr: 1 });
@@ -112,6 +129,15 @@ export function Timeline({
     moved: boolean;
     rect: { x: number; y: number; w: number; h: number };
   } | null>(null);
+
+  // Tell the Master to release any remotes it's holding in a live-preview
+  // state as soon as the toggle goes off (otherwise the last frame's effect
+  // would just stick on the hardware forever).
+  useEffect(() => {
+    if (!livePreviewOn) sendToMaster?.(VOX_EVENTS.previewStop, {});
+    // Only fire on the actual on->off/off->on transition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [livePreviewOn]);
 
   // Resync the draft whenever the committed show changes (and we're not mid-drag).
   useEffect(() => {
@@ -184,6 +210,18 @@ export function Timeline({
       if (dirtyRef.current) {
         dirtyRef.current = false;
         paint();
+      }
+      // Live preview: stream the clips active at the playhead to the real
+      // Master at ~10Hz (plenty for LED/relay/servo state — this isn't audio
+      // sample-accurate timing). Throttled independently of `dirty` so it
+      // also fires while paused/scrubbing, not just during playback.
+      if (livePreviewOnRef.current && ts - lastPreviewSendRef.current >= 100) {
+        lastPreviewSendRef.current = ts;
+        const states = resolveActiveClipStates(draftRef.current, playheadRef.current);
+        sendToMasterRef.current?.(VOX_EVENTS.previewFrame, {
+          timestamp: playheadRef.current,
+          states,
+        });
       }
       // Mirror playhead to chrome ~10x/sec for the readout.
       if (ts - lastDisplayRef.current > 100) {
