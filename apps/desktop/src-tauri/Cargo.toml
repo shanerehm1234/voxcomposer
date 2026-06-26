@@ -9,12 +9,13 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-# Serves the bundled web build over http://localhost:<port> from inside the
-# app binary (uses tiny_http under the hood) — see docs/DESKTOP_PACKAGING.md
-# for WHY a plain-HTTP localhost origin (not Tauri's native tauri:// origin)
-# is what lets the editor open ws:// to a VoxMaster on the LAN. No Node, no
-# sidecar process — this IS the local server, compiled into the one binary.
-tauri-plugin-localhost = "2"
+# Tiny HTTP server used to serve the embedded web build over http://localhost
+# from inside the app process. We serve it ourselves (rather than via
+# tauri-plugin-localhost) so we control the asset-path lookup exactly and can
+# log misses — see src/main.rs. Why a plain-HTTP localhost origin at all:
+# docs/DESKTOP_PACKAGING.md (it's what lets the editor open ws:// to a
+# VoxMaster; Tauri's native tauri:// origin can't).
+tiny_http = "0.12"
 # Picks a free TCP port at launch so we never collide with whatever else is
-# already listening on a fixed port on the customer's machine.
+# already listening on the customer's machine.
 portpicker = "0.1"
