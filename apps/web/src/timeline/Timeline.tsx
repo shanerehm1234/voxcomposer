@@ -103,6 +103,11 @@ export function Timeline({
   const prevRelayStatesRef = useRef<Map<string, ReturnType<typeof resolveActiveClipStates>[number]>>(
     new Map(),
   );
+  // Pixel/eyes clips active last frame (keyed "deviceId:type"), so a device
+  // whose clip just ended gets an explicit "off" (see the rAF loop).
+  const prevHoldStatesRef = useRef<Map<string, ReturnType<typeof resolveActiveClipStates>[number]>>(
+    new Map(),
+  );
   const playingRef = useRef(false);
   const lastTickRef = useRef(0);
   const sizeRef = useRef({ width: 0, height: 0, dpr: 1 });
@@ -145,8 +150,9 @@ export function Timeline({
   // would just stick on the hardware forever).
   useEffect(() => {
     if (!livePreviewOn) {
-      sendToMaster?.(VOX_EVENTS.previewStop, {}); // remotes fail safe (relays open)
+      sendToMaster?.(VOX_EVENTS.previewStop, {}); // remotes fail safe (relays open, pixels dark)
       prevRelayStatesRef.current = new Map();
+      prevHoldStatesRef.current = new Map();
     }
     // Only fire on the actual on->off/off->on transition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,35 +247,44 @@ export function Timeline({
       // sample-accurate timing). Throttled independently of `dirty` so it
       // also fires while paused/scrubbing, not just during playback.
       //
-      // Relays are the exception to "stream continuously": their commands are
-      // edge events, not idempotent state (re-sending a pulse re-triggers it).
-      // So relay clips fire once on ENTRY, and an ON clip sends its matching
-      // OFF on EXIT — the clip's length is exactly how long the relay holds.
+      // A remote holds whatever it was last told, so when a clip ENDS we must
+      // actively send an "off" — otherwise a pixel/eyes effect (or a latched
+      // relay) keeps running past the clip. So we track what was active last
+      // frame and, for any device whose clip just ended with nothing else
+      // active on it, send the matching off. Relays additionally suppress
+      // re-sends while active (a pulse re-triggers if repeated); pixels/eyes
+      // are idempotent so they stream continuously.
       if (livePreviewOnRef.current && ts - lastPreviewSendRef.current >= 100) {
         lastPreviewSendRef.current = ts;
         const states = resolveActiveClipStates(draftRef.current, playheadRef.current);
         const out: typeof states = [];
         const relaysNow = new Map<string, (typeof states)[number]>();
+        // Devices with an active pixel/eyes clip this frame (keyed device+type).
+        const holdNow = new Map<string, (typeof states)[number]>();
         for (const s of states) {
-          if (s.type !== 'relay') {
-            out.push(s);
+          if (s.type === 'relay') {
+            relaysNow.set(s.clipId, s);
+            if (!prevRelayStatesRef.current.has(s.clipId)) out.push(s); // rising edge
             continue;
           }
-          relaysNow.set(s.clipId, s);
-          if (!prevRelayStatesRef.current.has(s.clipId)) out.push(s); // rising edge
+          if (s.type === 'pixel' || s.type === 'eyes') holdNow.set(`${s.deviceId}:${s.type}`, s);
+          out.push(s);
         }
+        // Falling edge of a latching relay: release it.
         for (const [clipId, old] of prevRelayStatesRef.current) {
-          if (relaysNow.has(clipId)) continue; // still active
+          if (relaysNow.has(clipId)) continue;
           const oldData = old.data as Record<string, unknown>;
           if (oldData.action === 'on') {
-            // Falling edge of a latching clip: release it.
-            out.push({
-              ...old,
-              data: { channel: oldData.channel ?? 1, action: 'off' },
-            });
+            out.push({ ...old, data: { channel: oldData.channel ?? 1, action: 'off' } });
           }
         }
+        // Falling edge of a pixel/eyes clip: tell the device to go dark.
+        for (const [key, old] of prevHoldStatesRef.current) {
+          if (holdNow.has(key)) continue;
+          out.push({ ...old, data: { animation: 'off' } });
+        }
         prevRelayStatesRef.current = relaysNow;
+        prevHoldStatesRef.current = holdNow;
         sendToMasterRef.current?.(VOX_EVENTS.previewFrame, {
           timestamp: playheadRef.current,
           states: out,
