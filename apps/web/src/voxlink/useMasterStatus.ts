@@ -114,17 +114,48 @@ export function useMasterStatus(): MasterStatus {
     const tick = async () => {
       if (cancelled) return;
       const base = masterHttpBase(getMasterConfig());
-      // CORS is enabled on the Master, so read /status directly for its MAC +
-      // onboard I/O. If that fails (e.g. the HTTPS demo can't reach a plain
-      // http Master), fall back to the opaque no-cors liveness probe.
+      // The device roster comes from GET /status (CORS-enabled) — an HTTP
+      // poll can't go stale the way a WebSocket does (the browser holds a
+      // dead socket as "open" after a Master reboot/hang, which used to leave
+      // every device stuck "offline" until the app was restarted). /status
+      // already carries the full remotes list + the Master's own MAC/onboard.
+      // The WS is kept only for live-preview sends. If the CORS read fails
+      // (e.g. the HTTPS demo can't reach a plain-http Master), fall back to
+      // the opaque no-cors liveness probe.
       let alive = false;
       try {
         const res = await fetch(`${base}/status`, { cache: 'no-store' });
         if (res.ok) {
           alive = true;
-          const s = (await res.json()) as { sys?: { mac?: string; onboard?: MasterInfo['onboard'] } };
-          if (!cancelled && s.sys?.mac) {
-            setInfo({ mac: s.sys.mac, onboard: s.sys.onboard ?? [] });
+          const s = (await res.json()) as {
+            sys?: { mac?: string; onboard?: MasterInfo['onboard'] };
+            remotes?: {
+              id: string;
+              online: boolean;
+              rssi: number;
+              ip?: string;
+              name?: string;
+              kind?: string;
+              channels?: number;
+              paired?: boolean;
+            }[];
+          };
+          if (!cancelled) {
+            if (s.sys?.mac) setInfo({ mac: s.sys.mac, onboard: s.sys.onboard ?? [] });
+            const next = new Map<string, DeviceStatusPayload>();
+            for (const r of s.remotes ?? []) {
+              next.set(r.id, {
+                deviceId: r.id,
+                online: r.online,
+                rssi: r.rssi,
+                ip: r.ip,
+                name: r.name,
+                kind: r.kind,
+                channels: r.channels,
+                paired: r.paired ?? false,
+              });
+            }
+            setDevices(next);
           }
         }
       } catch {
@@ -133,10 +164,7 @@ export function useMasterStatus(): MasterStatus {
       if (cancelled) return;
       if (alive) {
         setConnected(true);
-        openWs();
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(encodeVoxLink(VOX_EVENTS.deviceScan));
-        }
+        openWs(); // for live-preview sends; roster no longer depends on it
       } else {
         setConnected(false);
         setDevices(new Map());
