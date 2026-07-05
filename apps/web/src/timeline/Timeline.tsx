@@ -983,6 +983,23 @@ export function Timeline({
     [onCommit, markDirty],
   );
 
+  // Set the show's length to exactly where the last clip ends — one click to
+  // trim trailing dead air (the show plays to show.duration, so an over-long
+  // duration means it keeps "running", dark, after the last effect).
+  const fitDuration = useCallback(() => {
+    let end = 0;
+    for (const t of draftRef.current.tracks)
+      for (const c of t.clips) end = Math.max(end, c.startMs + c.durationMs);
+    if (end <= 0) {
+      onNotify?.('Nothing on the timeline yet', 'info');
+      return;
+    }
+    const next = { ...draftRef.current, duration: end };
+    draftRef.current = next;
+    onCommit(next);
+    onNotify?.(`Show length set to ${(end / 1000).toFixed(1)}s`, 'success');
+  }, [onCommit, onNotify]);
+
   // --- Keyboard shortcuts ---------------------------------------------------
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1114,6 +1131,13 @@ export function Timeline({
             {formatTimecode(displayMs, 1)}
           </span>
           <span className="font-mono text-xs text-muted">/ {formatTimecode(show.duration, 1)}</span>
+          <button
+            onClick={fitDuration}
+            title="Set show length to where the last clip ends"
+            className="ml-1 rounded-md border border-border/70 bg-bg3/40 px-1.5 py-0.5 text-[10px] font-medium text-muted transition-colors hover:text-text"
+          >
+            Fit
+          </button>
         </div>
 
         <div className="relative">

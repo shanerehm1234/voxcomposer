@@ -530,6 +530,23 @@ function ClipFields({
             </div>
           )}
 
+          {isPixel && (
+            <div className="mt-2.5 grid grid-cols-2 gap-2">
+              <NumberField
+                label="Fade in (s)"
+                value={((Number(data.fadeInMs ?? 0)) / 1000).toFixed(2)}
+                onChange={(v) => patchData({ fadeInMs: Math.max(0, Math.round(parseFloat(v) * 1000) || 0) })}
+                onCommit={() => commit()}
+              />
+              <NumberField
+                label="Fade out (s)"
+                value={((Number(data.fadeOutMs ?? 0)) / 1000).toFixed(2)}
+                onChange={(v) => patchData({ fadeOutMs: Math.max(0, Math.round(parseFloat(v) * 1000) || 0) })}
+                onCommit={() => commit()}
+              />
+            </div>
+          )}
+
           {isEyes && (
             <div className="mt-3">
               <FieldLabel>Looking</FieldLabel>

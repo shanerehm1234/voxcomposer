@@ -128,6 +128,12 @@ export const PixelClipData = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/)
     .optional(),
   brightness: z.number().int().min(0).max(255).optional(),
+  /** Brightness ramp at the clip's start / end, in ms (0 = no fade). Like an
+   *  audio fade but on the pixels — the effect eases up from black and back
+   *  down. Applied by the Composer preview; carried to the remote for
+   *  hardware fades once its firmware reads them. */
+  fadeInMs: Millis.default(0),
+  fadeOutMs: Millis.default(0),
   // --- Effect-engine parameters (each effect reads the ones it uses) -------
   /** Animation rate, 0 (slowest) .. 255 (fastest). Doubles as WLED's sx when
    *  a wledFx is set — one knob, same meaning either way. */

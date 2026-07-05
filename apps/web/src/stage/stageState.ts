@@ -272,7 +272,12 @@ export function resolveStageState(
             const params = paramsFromClipData(data);
             const wledFx = typeof data.wledFx === 'number' ? data.wledFx : undefined;
             const eff = effectiveAnimation(params.animation, wledFx);
-            pixel.active = { label: eff.label, params: { ...params, animation: eff.animation } };
+            // Brightness fade at the clip's ends (matches livePreview).
+            const fade = fadeEnvelope(offset, clip.durationMs, num(data, 'fadeInMs', 0), num(data, 'fadeOutMs', 0));
+            pixel.active = {
+              label: eff.label,
+              params: { ...params, animation: eff.animation, brightness: Math.round(params.brightness * fade) },
+            };
           }
           break;
         }
