@@ -103,11 +103,6 @@ export function Timeline({
   const prevRelayStatesRef = useRef<Map<string, ReturnType<typeof resolveActiveClipStates>[number]>>(
     new Map(),
   );
-  // Pixel/eyes clips active last frame (keyed "deviceId:type"), so a device
-  // whose clip just ended gets an explicit "off" (see the rAF loop).
-  const prevHoldStatesRef = useRef<Map<string, ReturnType<typeof resolveActiveClipStates>[number]>>(
-    new Map(),
-  );
   const playingRef = useRef(false);
   const lastTickRef = useRef(0);
   const sizeRef = useRef({ width: 0, height: 0, dpr: 1 });
@@ -152,7 +147,6 @@ export function Timeline({
     if (!livePreviewOn) {
       sendToMaster?.(VOX_EVENTS.previewStop, {}); // remotes fail safe (relays open, pixels dark)
       prevRelayStatesRef.current = new Map();
-      prevHoldStatesRef.current = new Map();
     }
     // Only fire on the actual on->off/off->on transition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -247,30 +241,29 @@ export function Timeline({
       // sample-accurate timing). Throttled independently of `dirty` so it
       // also fires while paused/scrubbing, not just during playback.
       //
-      // A remote holds whatever it was last told, so when a clip ENDS we must
-      // actively send an "off" — otherwise a pixel/eyes effect (or a latched
-      // relay) keeps running past the clip. So we track what was active last
-      // frame and, for any device whose clip just ended with nothing else
-      // active on it, send the matching off. Relays additionally suppress
-      // re-sends while active (a pulse re-triggers if repeated); pixels/eyes
-      // are idempotent so they stream continuously.
-      if (livePreviewOnRef.current && ts - lastPreviewSendRef.current >= 100) {
+      // "Output to lights": a remote holds whatever it was last told, so we
+      // stream the full desired state — a pixel/eyes device with no active
+      // clip is streamed OFF every frame (idempotent, so a dropped UDP frame
+      // self-corrects on the next tick — sending off only once on the edge
+      // meant one lost packet left the effect running forever). Relays are
+      // the exception: their commands are edge events (a repeated pulse
+      // re-triggers), so they fire once on entry and release once on exit.
+      if (livePreviewOnRef.current && ts - lastPreviewSendRef.current >= 50) {
         lastPreviewSendRef.current = ts;
         const states = resolveActiveClipStates(draftRef.current, playheadRef.current);
         const out: typeof states = [];
         const relaysNow = new Map<string, (typeof states)[number]>();
-        // Devices with an active pixel/eyes clip this frame (keyed device+type).
-        const holdNow = new Map<string, (typeof states)[number]>();
+        const activeHold = new Set<string>(); // "deviceId:type" active this frame
         for (const s of states) {
           if (s.type === 'relay') {
             relaysNow.set(s.clipId, s);
             if (!prevRelayStatesRef.current.has(s.clipId)) out.push(s); // rising edge
             continue;
           }
-          if (s.type === 'pixel' || s.type === 'eyes') holdNow.set(`${s.deviceId}:${s.type}`, s);
+          if (s.type === 'pixel' || s.type === 'eyes') activeHold.add(`${s.deviceId}:${s.type}`);
           out.push(s);
         }
-        // Falling edge of a latching relay: release it.
+        // Relay falling edge: release a latched ON clip.
         for (const [clipId, old] of prevRelayStatesRef.current) {
           if (relaysNow.has(clipId)) continue;
           const oldData = old.data as Record<string, unknown>;
@@ -278,13 +271,22 @@ export function Timeline({
             out.push({ ...old, data: { channel: oldData.channel ?? 1, action: 'off' } });
           }
         }
-        // Falling edge of a pixel/eyes clip: tell the device to go dark.
-        for (const [key, old] of prevHoldStatesRef.current) {
-          if (holdNow.has(key)) continue;
-          out.push({ ...old, data: { animation: 'off' } });
+        // Every pixel/eyes device with no active clip → stream OFF (deduped).
+        const offSent = new Set<string>();
+        for (const track of draftRef.current.tracks) {
+          if (track.type !== 'pixel' && track.type !== 'eyes') continue;
+          const key = `${track.deviceId}:${track.type}`;
+          if (activeHold.has(key) || offSent.has(key)) continue;
+          offSent.add(key);
+          out.push({
+            trackId: track.id,
+            deviceId: track.deviceId,
+            clipId: `${track.id}:off`,
+            type: track.type,
+            data: { animation: 'off' },
+          });
         }
         prevRelayStatesRef.current = relaysNow;
-        prevHoldStatesRef.current = holdNow;
         sendToMasterRef.current?.(VOX_EVENTS.previewFrame, {
           timestamp: playheadRef.current,
           states: out,

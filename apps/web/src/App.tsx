@@ -83,11 +83,17 @@ export function App() {
   const masterMac = masterStatus.info?.mac;
   const sidebarDevices = useMemo<DemoDevice[]>(() => {
     const telemetryById = new Map(demo.devices.map((d) => [d.id, d]));
+    // MACs must match case-insensitively: the Master reports uppercase, but a
+    // device may have been stored with other casing (the remote's strcasecmp
+    // still routes commands, so it plays fine yet would read "offline").
+    const liveByMac = new Map(
+      [...masterStatus.devices].map(([id, s]) => [id.toUpperCase(), s]),
+    );
     return show.devices.map((d) => {
       // The Vox Master itself is the hub, not a Vox-Link remote, so it never
       // appears in the device_status roster — its liveness follows the
       // Master connection directly.
-      if (masterMac && d.id === masterMac) {
+      if (masterMac && d.id.toUpperCase() === masterMac.toUpperCase()) {
         return {
           ...d,
           connection: masterStatus.connected ? 'online' : 'offline',
@@ -96,7 +102,7 @@ export function App() {
         } as DemoDevice;
       }
       const t = telemetryById.get(d.id);
-      const live = masterStatus.devices.get(d.id);
+      const live = liveByMac.get(d.id.toUpperCase());
       if (live) {
         return {
           ...d,
