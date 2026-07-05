@@ -12,8 +12,13 @@ import {
   IconPause,
   IconPlay,
   IconSkipStart,
+  IconSkull,
   IconStop,
 } from '../components/icons.js';
+import { DEVICE_DRAG_TYPE } from '../dnd.js';
+import { addBytesToLibrary, getMedia, MEDIA_DRAG_TYPE } from '../media/library.js';
+import { publishStageFrame } from '../stage/stageBus.js';
+import { StagePanel } from '../stage/StagePanel.js';
 import {
   addClip,
   applyDrag,
@@ -93,6 +98,11 @@ export function Timeline({
   const sendToMasterRef = useRef(sendToMaster);
   sendToMasterRef.current = sendToMaster;
   const lastPreviewSendRef = useRef(0);
+  // Relay clips active in the last preview frame, for edge detection (see the
+  // rAF loop). Keyed by clip id; cleared when the preview toggles off.
+  const prevRelayStatesRef = useRef<Map<string, ReturnType<typeof resolveActiveClipStates>[number]>>(
+    new Map(),
+  );
   const playingRef = useRef(false);
   const lastTickRef = useRef(0);
   const sizeRef = useRef({ width: 0, height: 0, dpr: 1 });
@@ -134,7 +144,10 @@ export function Timeline({
   // state as soon as the toggle goes off (otherwise the last frame's effect
   // would just stick on the hardware forever).
   useEffect(() => {
-    if (!livePreviewOn) sendToMaster?.(VOX_EVENTS.previewStop, {});
+    if (!livePreviewOn) {
+      sendToMaster?.(VOX_EVENTS.previewStop, {}); // remotes fail safe (relays open)
+      prevRelayStatesRef.current = new Map();
+    }
     // Only fire on the actual on->off/off->on transition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [livePreviewOn]);
@@ -160,6 +173,15 @@ export function Timeline({
   const [importing, setImporting] = useState(false);
   const [loopOn, setLoopOn] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  // Virtual stage visibility — remembered across sessions, on by default (it's
+  // the closest thing to seeing your props without dragging them out).
+  const [stageOn, setStageOn] = useState(() => localStorage.getItem('vox.stage.open') !== '0');
+  const toggleStage = useCallback(() => {
+    setStageOn((on) => {
+      localStorage.setItem('vox.stage.open', on ? '0' : '1');
+      return !on;
+    });
+  }, []);
   const lastDisplayRef = useRef(0);
 
   const markDirty = useCallback(() => {
@@ -211,16 +233,46 @@ export function Timeline({
         dirtyRef.current = false;
         paint();
       }
+      // Feed the virtual stage (a cheap assignment; the StagePanel decides
+      // whether anything actually needs repainting).
+      publishStageFrame(draftRef.current, playheadRef.current, playingRef.current);
       // Live preview: stream the clips active at the playhead to the real
       // Master at ~10Hz (plenty for LED/relay/servo state — this isn't audio
       // sample-accurate timing). Throttled independently of `dirty` so it
       // also fires while paused/scrubbing, not just during playback.
+      //
+      // Relays are the exception to "stream continuously": their commands are
+      // edge events, not idempotent state (re-sending a pulse re-triggers it).
+      // So relay clips fire once on ENTRY, and an ON clip sends its matching
+      // OFF on EXIT — the clip's length is exactly how long the relay holds.
       if (livePreviewOnRef.current && ts - lastPreviewSendRef.current >= 100) {
         lastPreviewSendRef.current = ts;
         const states = resolveActiveClipStates(draftRef.current, playheadRef.current);
+        const out: typeof states = [];
+        const relaysNow = new Map<string, (typeof states)[number]>();
+        for (const s of states) {
+          if (s.type !== 'relay') {
+            out.push(s);
+            continue;
+          }
+          relaysNow.set(s.clipId, s);
+          if (!prevRelayStatesRef.current.has(s.clipId)) out.push(s); // rising edge
+        }
+        for (const [clipId, old] of prevRelayStatesRef.current) {
+          if (relaysNow.has(clipId)) continue; // still active
+          const oldData = old.data as Record<string, unknown>;
+          if (oldData.action === 'on') {
+            // Falling edge of a latching clip: release it.
+            out.push({
+              ...old,
+              data: { channel: oldData.channel ?? 1, action: 'off' },
+            });
+          }
+        }
+        prevRelayStatesRef.current = relaysNow;
         sendToMasterRef.current?.(VOX_EVENTS.previewFrame, {
           timestamp: playheadRef.current,
-          states,
+          states: out,
         });
       }
       // Mirror playhead to chrome ~10x/sec for the readout.
@@ -232,7 +284,6 @@ export function Timeline({
     };
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paint, show.duration]);
 
   // --- Size / DPR via ResizeObserver ---------------------------------------
@@ -490,6 +541,9 @@ export function Timeline({
 
     // Idle hover: reflect what a click would do via the cursor.
     updateHoverCursor(e);
+    // updateHoverCursor is a stable useCallback([]) defined below; listing it
+    // would require reordering the declarations for zero behavioural gain.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updateHoverCursor = useCallback((e: React.PointerEvent) => {
@@ -557,21 +611,32 @@ export function Timeline({
   // a dropped file later fails on some platforms, so we never touch the File again.
   const importAudioBytes = useCallback(
     async (bytes: ArrayBuffer, filename: string, mime: string, dropX: number, dropY: number) => {
-      // Place on the track under the cursor if it's audio; else the first audio track.
+      // Place on the track under the cursor if it's audio; else the first audio
+      // track; else create one — a drop on an empty show must Just Work.
       const idx = trackIndexAtY(dropY, show.tracks.length);
       const underCursor = idx >= 0 ? show.tracks[idx] : undefined;
-      const target =
+      let target =
         underCursor?.type === 'audio' ? underCursor : show.tracks.find((t) => t.type === 'audio');
+      let base = show;
       if (!target) {
-        onNotify?.('No audio track to drop onto — add one with + Track', 'error');
-        return;
+        const dev = show.devices[0];
+        target = {
+          id: newClipId(),
+          deviceId: dev?.id ?? 'unassigned',
+          type: 'audio',
+          label: dev ? dev.name : 'Audio',
+          clips: [],
+        };
+        base = { ...show, tracks: [...show.tracks, target] };
       }
 
       setImporting(true);
       try {
+        // Mirror into the media library so the Media tab knows about it too.
+        void addBytesToLibrary(bytes.slice(0), filename, mime);
         const startMs = Math.max(0, snap(xToMs(viewportRef.current, dropX), true));
         const clip = await buildAudioClip(bytes, filename, mime, target.deviceId, startMs);
-        const next = addClip(show, target.id, clip);
+        const next = addClip(base, target.id, clip);
         draftRef.current = next;
         onCommit(next);
         selectOne(clip.id);
@@ -591,11 +656,72 @@ export function Timeline({
   );
 
   const onDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes('Files')) {
+    if (
+      e.dataTransfer.types.includes('Files') ||
+      e.dataTransfer.types.includes(MEDIA_DRAG_TYPE) ||
+      e.dataTransfer.types.includes(DEVICE_DRAG_TYPE)
+    ) {
       e.preventDefault();
       setDropActive(true);
     }
   }, []);
+
+  // Drop a device from the sidebar: create the track(s) it performs on. A
+  // skull gets its two surfaces (voice audio + eyes); everything else gets
+  // its one native track type.
+  const addDeviceTracks = useCallback(
+    (device: { id: string; name: string; type: string; onboard?: string[] }) => {
+      const trackTypes =
+        device.onboard && device.onboard.length > 0
+          ? device.onboard // the Vox Master: one lane per backpack output type
+          : device.type === 'skull'
+            ? ['audio', 'eyes']
+            : device.type === 'pixel' || device.type === 'dmx' || device.type === 'relay'
+              ? [device.type]
+              : device.type === 'audio'
+                ? ['audio']
+                : [];
+      if (trackTypes.length === 0) {
+        onNotify?.(`“${device.name}” has no timeline tracks — use + Track for plugin lanes`, 'info');
+        return;
+      }
+      let next = draftRef.current;
+      const added: string[] = [];
+      for (const type of trackTypes) {
+        // One lane per (device, type) by default — a second drop selects
+        // rather than silently duplicating. More lanes via + Track.
+        if (next.tracks.some((t) => t.deviceId === device.id && t.type === type)) continue;
+        next = {
+          ...next,
+          tracks: [
+            ...next.tracks,
+            {
+              id: newClipId(),
+              deviceId: device.id,
+              type,
+              label: trackTypes.length > 1 && type === 'eyes' ? `${device.name} — Eyes` : device.name,
+              clips: [],
+            },
+          ],
+        };
+        added.push(type);
+      }
+      if (added.length === 0) {
+        onNotify?.(`“${device.name}” is already on the timeline`, 'info');
+        return;
+      }
+      draftRef.current = next;
+      onCommit(next);
+      dirtyRef.current = true;
+      onNotify?.(
+        device.type === 'skull'
+          ? `Added “${device.name}” — drop audio on its track, program eyes on the other`
+          : `Added a ${added[0]} track for “${device.name}”`,
+        'success',
+      );
+    },
+    [onCommit, onNotify],
+  );
 
   const onDragLeave = useCallback((e: React.DragEvent) => {
     // Only clear when leaving the wrapper, not when crossing child elements.
@@ -606,18 +732,42 @@ export function Timeline({
     (e: React.DragEvent) => {
       e.preventDefault();
       setDropActive(false);
-      const file = Array.from(e.dataTransfer.files).find(isAcceptedAudio);
-      if (!file) return; // .vox/.zip handled at the window level (App)
+
+      // A device from the sidebar: add its track(s), wherever it lands.
+      const deviceJson = e.dataTransfer.getData(DEVICE_DRAG_TYPE);
+      if (deviceJson) {
+        try {
+          addDeviceTracks(JSON.parse(deviceJson));
+        } catch {
+          /* malformed payload — ignore */
+        }
+        return;
+      }
+
       const rect = canvasRef.current!.getBoundingClientRect();
       const dropX = e.clientX - rect.left - LAYOUT.trackHeaderWidth;
       const dropY = e.clientY - rect.top;
       if (dropX < 0) return;
+
+      // A card dragged from the Media Library carries its id, not a File.
+      const mediaId = e.dataTransfer.getData(MEDIA_DRAG_TYPE);
+      if (mediaId) {
+        const media = getMedia(mediaId);
+        if (!media) return;
+        void media.blob
+          .arrayBuffer()
+          .then((b) => importAudioBytes(b, media.filename, media.blob.type, dropX, dropY));
+        return;
+      }
+
+      const file = Array.from(e.dataTransfer.files).find(isAcceptedAudio);
+      if (!file) return; // .vox/.zip handled at the window level (App)
       // Read the bytes NOW, synchronously, while the dropped file is still valid.
       const bytes = file.arrayBuffer();
       const { name, type } = file;
       void bytes.then((b) => importAudioBytes(b, name, type, dropX, dropY));
     },
-    [importAudioBytes],
+    [importAudioBytes, addDeviceTracks],
   );
 
   // --- Duplicate / copy / paste (operate on the whole selection) -----------
@@ -939,6 +1089,9 @@ export function Timeline({
           <TransportButton title="Loop region — L (set ends with I / O)" onClick={toggleLoop} accent={loopOn}>
             <IconLoop className="h-4 w-4" />
           </TransportButton>
+          <TransportButton title="Virtual stage — preview your props without hardware" onClick={toggleStage} accent={stageOn}>
+            <IconSkull className="h-4 w-4" />
+          </TransportButton>
         </div>
 
         <div className="flex items-baseline gap-2 rounded-xl border border-border/70 bg-bg/60 px-3.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
@@ -994,6 +1147,7 @@ export function Timeline({
           <Kbd>⌘A</Kbd> track · <Kbd>⌘D</Kbd> dup · <Kbd>⌘Z</Kbd> undo
         </span>
       </div>
+      {stageOn && <StagePanel />}
       <div
         ref={wrapRef}
         className="relative min-h-0 flex-1 overflow-hidden"
@@ -1127,33 +1281,36 @@ function TransportButton({
   );
 }
 
-/** Default duration + payload for a newly double-click-created clip. */
+/** Default duration + payload for a newly double-click-created clip. 5s —
+ * long enough to grab the resize handles without zooming in first. */
 function defaultClipFor(type: string): { durationMs: number; data: Record<string, unknown> } {
   switch (type) {
     case 'dmx':
-      return { durationMs: 2000, data: { universe: 0, channel: 1, value: 255, fadeMs: 0 } };
+      return { durationMs: 5000, data: { universe: 0, channel: 1, value: 255, fadeMs: 0 } };
     case 'relay':
-      return { durationMs: 500, data: { channel: 0, action: 'pulse', durationMs: 500 } };
+      // ON = closed for exactly the clip's length (the engine emits the
+      // matching off at the end) — the intuitive default.
+      return { durationMs: 5000, data: { channel: 1, action: 'on' } };
     case 'servo':
     case 'neck':
       return {
-        durationMs: 1000,
+        durationMs: 5000,
         data: {
           axis: 'default',
           keyframes: [
             { timeMs: 0, value: 0 },
-            { timeMs: 1000, value: 1 },
+            { timeMs: 5000, value: 1 },
           ],
         },
       };
     case 'pixel':
-      return { durationMs: 2000, data: { animation: 'glow', color: '#FF6A00', brightness: 220 } };
+      return { durationMs: 5000, data: { animation: 'glow', color: '#FF6A00', brightness: 220 } };
     case 'eyes':
-      return { durationMs: 2000, data: { animation: 'idle', color: '#AFA9EC' } };
+      return { durationMs: 5000, data: { animation: 'idle', color: '#AFA9EC' } };
     default:
       // Plugin track types (wled/http/udp/…): empty payload; the plugin's
       // inspector + summary guide the user to fill it in.
-      return { durationMs: 2000, data: {} };
+      return { durationMs: 5000, data: {} };
   }
 }
 

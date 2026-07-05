@@ -13,6 +13,15 @@ export interface DemoDevice {
   /** Optional icon override (e.g. 'fog', 'motion') when the type icon is too generic. */
   iconHint?: string;
   rssi?: number;
+  /** LAN IP as last reported by the Master (VoxPixel/WLED remotes) — enables
+   *  the "open this remote's own web UI" affordance. */
+  ip?: string;
+  /** Carried through from the persisted VoxDevice so editing round-trips. */
+  pixelCount?: number;
+  relayCount?: number;
+  relayLabels?: string[];
+  onboard?: string[];
+  fixture?: VoxShow['devices'][number]['fixture'];
   /** Vox-Link API/firmware version reported by the remote. */
   apiVersion?: string;
   firmware?: string;
@@ -53,8 +62,42 @@ export interface DemoState {
 }
 
 /**
- * Demo state mirroring the design mockup ("Haunted Hallway 2025"). Used to
- * develop the UI before media import and the backend exist.
+ * Demo mode: the hosted showcase (voxcomposer.app) and `?demo` boot with the
+ * sample "Haunted Hallway" show so visitors see a dressed stage. A real
+ * install boots empty — every device and file the user sees is real.
+ */
+export function isDemoMode(): boolean {
+  return (
+    new URLSearchParams(window.location.search).has('demo') ||
+    window.location.hostname.endsWith('voxcomposer.app')
+  );
+}
+
+/** The clean first-run state a real install boots into. */
+export function makeEmptyState(): DemoState {
+  registerBuiltins();
+  const now = new Date().toISOString();
+  return {
+    show: {
+      version: VOX_FORMAT_VERSION,
+      name: 'New Show',
+      created: now,
+      modified: now,
+      duration: 60_000,
+      devices: [],
+      tracks: [],
+      metadata: {},
+    },
+    devices: [],
+    media: [],
+    showFiles: [],
+    master: { connected: false, ip: 'voxmaster.local' },
+  };
+}
+
+/**
+ * Demo state mirroring the design mockup ("Haunted Hallway 2025"). Only used
+ * in demo mode (see isDemoMode) — a real install never sees these devices.
  */
 export function makeDemoState(): DemoState {
   // Built-in plugins must be registered before the timeline renders plugin

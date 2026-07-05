@@ -48,6 +48,17 @@ export const DmxClipData = z.object({
   channel: z.number().int().min(1).max(512),
   value: z.number().int().min(0).max(255),
   fadeMs: Millis.default(0),
+  /**
+   * Fixture look, when the clip's device has a fixture assigned: the editable
+   * role→value source (`look`) and its compiled absolute channels (`levels`).
+   * The Composer compiles at edit time (see shared/vox/fixture.ts) so the
+   * Master/remote just apply `levels` — no fixture awareness on-device. When
+   * `levels` is present it supersedes the single channel/value pair.
+   */
+  look: z.record(z.number()).optional(),
+  levels: z
+    .array(z.object({ channel: z.number().int().min(1).max(512), value: z.number().int().min(0).max(255) }))
+    .optional(),
 });
 export type DmxClipData = z.infer<typeof DmxClipData>;
 
@@ -66,8 +77,29 @@ export const ServoClipData = z.object({
 });
 export type ServoClipData = z.infer<typeof ServoClipData>;
 
-/** Animations a WS281x pixel/LED prop understands (matches the ring remote). */
-export const PixelAnimation = z.enum(['solid', 'pulse', 'glow', 'flash', 'chase', 'off']);
+/**
+ * Built-in animations a VoxPixel prop understands. The first six are the
+ * original ring-remote set; the rest are the parameterised effect engine
+ * (see the Composer's pixel/engine.ts — the reference implementation the
+ * remote firmware reproduces). All are deterministic in (params, time) so
+ * previews and hardware agree frame-for-frame.
+ */
+export const PixelAnimation = z.enum([
+  'solid',
+  'pulse',
+  'glow',
+  'flash',
+  'chase',
+  'off',
+  'scanner',
+  'wipe',
+  'meteor',
+  'twinkle',
+  'sparkle',
+  'lightning',
+  'rainbow',
+  'random',
+]);
 export type PixelAnimation = z.infer<typeof PixelAnimation>;
 
 /**
@@ -86,26 +118,70 @@ export const PixelClipData = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default('#FF6A00'),
+  /**
+   * Secondary color — the chase tail / background pixels, and WLED's
+   * SEGCOLOR(1). Omitted means off/black (WLED firmware may otherwise apply
+   * its own default, which reads as "why are my pixels blue?").
+   */
+  color2: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
   brightness: z.number().int().min(0).max(255).optional(),
+  // --- Effect-engine parameters (each effect reads the ones it uses) -------
+  /** Animation rate, 0 (slowest) .. 255 (fastest). Doubles as WLED's sx when
+   *  a wledFx is set — one knob, same meaning either way. */
+  speed: z.number().int().min(0).max(255).optional(),
+  /** Runner/segment length in pixels (chase, scanner, wipe, meteor). */
+  size: z.number().int().min(1).max(100).optional(),
+  /** Fading tail length in pixels (chase, scanner, meteor). */
+  trail: z.number().int().min(0).max(100).optional(),
+  /** How busy the effect is, 0..255 (twinkle, sparkle, lightning). */
+  density: z.number().int().min(0).max(255).optional(),
+  /** Travel direction along the strip's run order. */
+  direction: z.enum(['forward', 'reverse']).optional(),
   // --- Phase 2 (WLED) — optional until the WLED remote ships ---
   /** WLED effect index. */
   wledFx: z.number().int().min(0).optional(),
   /** WLED palette index. */
   palette: z.number().int().min(0).optional(),
-  /** WLED effect speed (sx), 0..255. */
-  speed: z.number().int().min(0).max(255).optional(),
   /** WLED effect intensity (ix), 0..255. */
   intensity: z.number().int().min(0).max(255).optional(),
 });
 export type PixelClipData = z.infer<typeof PixelClipData>;
 
-/** Eyes (OcularVox) clip — animation name + colour, relayed verbatim. */
+/**
+ * Eye styles the OcularVox Pro firmware implements. This list is the wire
+ * vocabulary — the Composer offers these names and the skull renders them.
+ * `animation` stays an open string on the wire so future firmware can add
+ * styles without a schema bump; unknown names fall back to `idle` on-device.
+ */
+export const EYE_STYLES = [
+  'idle',
+  'glow',
+  'blink',
+  'flicker',
+  'scan',
+  'spiral',
+  'fire',
+  'angry',
+  'off',
+] as const;
+export type EyeStyle = (typeof EYE_STYLES)[number];
+
+/**
+ * Eyes (OcularVox) clip — style + colour + gaze direction, relayed verbatim.
+ * `lookX`/`lookY` steer where the eyes point (-1 = full left/up, +1 = full
+ * right/down, 0 = straight ahead); omitted means straight ahead.
+ */
 export const EyesClipData = z.object({
   animation: z.string().default('idle'),
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default('#AFA9EC'),
+  lookX: z.number().min(-1).max(1).optional(),
+  lookY: z.number().min(-1).max(1).optional(),
 });
 export type EyesClipData = z.infer<typeof EyesClipData>;
 

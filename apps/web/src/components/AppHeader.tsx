@@ -6,7 +6,6 @@ import {
   IconMedia,
   IconPlay,
   IconPlus,
-  IconSchedule,
   IconSettings,
   IconTimeline,
 } from './icons.js';
@@ -15,10 +14,12 @@ interface AppHeaderProps {
   remotesOnline: number;
   activeView: string;
   onSelectView: (view: string) => void;
+  onNewShow: () => void;
+  onOpenShow: () => void;
+  onImportAudio: () => void;
   onExport: () => void;
   onExportPackage: () => void;
   onSendToMaster: () => void;
-  onImport: () => void;
   onShowHelp: () => void;
   onInstall?: () => void;
   /** Whether the timeline is currently streaming live clip states to the Master. */
@@ -30,7 +31,6 @@ const NAV = [
   { id: 'timeline', label: 'Timeline', Icon: IconTimeline },
   { id: 'devices', label: 'Devices', Icon: IconDevices },
   { id: 'media', label: 'Media', Icon: IconMedia },
-  { id: 'schedule', label: 'Schedule', Icon: IconSchedule },
   { id: 'settings', label: 'Settings', Icon: IconSettings },
 ] as const;
 
@@ -38,16 +38,19 @@ export function AppHeader({
   remotesOnline,
   activeView,
   onSelectView,
+  onNewShow,
+  onOpenShow,
+  onImportAudio,
   onExport,
   onExportPackage,
   onSendToMaster,
-  onImport,
   onInstall,
   onShowHelp,
   livePreviewOn,
   onToggleLivePreview,
 }: AppHeaderProps) {
   const [exportOpen, setExportOpen] = useState(false);
+  const [fileOpen, setFileOpen] = useState(false);
   return (
     <header className="relative flex items-center gap-4 border-b border-border/70 bg-bg2/80 px-4 py-2.5 backdrop-blur">
       {/* Brand */}
@@ -98,14 +101,60 @@ export function AppHeader({
             <span className="hidden sm:inline">Install</span>
           </button>
         )}
-        <button
-          onClick={onImport}
-          title="Open a show (.vox / .zip) or add an audio file"
-          aria-label="Open a show or add an audio file"
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/80 bg-bg3/40 text-muted transition-colors hover:text-text"
-        >
-          <IconFolderOpen className="h-4 w-4" />
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setFileOpen((o) => !o)}
+            title="New, open, or import"
+            aria-label="File menu"
+            aria-haspopup="menu"
+            aria-expanded={fileOpen}
+            className="flex items-center gap-2 rounded-lg border border-border/80 bg-bg3/40 px-3 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-text"
+          >
+            <IconFolderOpen className="h-4 w-4" />
+            <span className="hidden sm:inline">File</span>
+          </button>
+          {fileOpen && (
+            <>
+              <div className="fixed inset-0 z-20" onPointerDown={() => setFileOpen(false)} />
+              <div className="vox-menu absolute right-0 top-full z-30 mt-1 min-w-[230px] overflow-hidden rounded-xl border border-border/80 bg-bg2/95 py-1 shadow-2xl backdrop-blur">
+                <ExportItem
+                  title="New show"
+                  desc="Start from a blank timeline"
+                  onClick={() => {
+                    onNewShow();
+                    setFileOpen(false);
+                  }}
+                />
+                <ExportItem
+                  title="Open show…"
+                  desc="A .vox file or a .zip show package"
+                  onClick={() => {
+                    onOpenShow();
+                    setFileOpen(false);
+                  }}
+                />
+                <div className="my-1 h-px bg-border/60" />
+                <ExportItem
+                  title="Import audio…"
+                  desc="Add WAV / MP3 files to the Media library"
+                  onClick={() => {
+                    onImportAudio();
+                    setFileOpen(false);
+                  }}
+                />
+                <div className="my-1 h-px bg-border/60" />
+                <ExportItem
+                  title="Save .vox"
+                  desc="Download this show (also Ctrl+S)"
+                  onClick={() => {
+                    onExport();
+                    setFileOpen(false);
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </div>
         <div className="relative">
           <button
             onClick={() => setExportOpen((o) => !o)}

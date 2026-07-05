@@ -48,10 +48,37 @@ fn candidate_keys(url: &str) -> Vec<String> {
     keys
 }
 
+/// Minimal percent-decoding for the /__open query value (encodeURIComponent
+/// output: alphanumerics survive, everything else arrives as %XX).
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            if let (Some(h), Some(l)) = (
+                bytes.get(i + 1).and_then(|c| (*c as char).to_digit(16)),
+                bytes.get(i + 2).and_then(|c| (*c as char).to_digit(16)),
+            ) {
+                out.push((h * 16 + l) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 fn main() {
     let port = portpicker::pick_unused_port().expect("no free TCP port available");
 
     tauri::Builder::default()
+        // "Open web UI" buttons (Master + remotes) hand URLs to the system
+        // browser through this plugin — the webview itself swallows
+        // target="_blank" navigations. See openExternal() in apps/web.
+        .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
             let resolver = app.asset_resolver();
             let server =
@@ -61,6 +88,22 @@ fn main() {
             std::thread::spawn(move || {
                 for request in server.incoming_requests() {
                     let url = request.url().to_string();
+
+                    // "Open web UI" buttons hit this endpoint (see the web
+                    // app's openExternal()): hand the URL to the system
+                    // browser from native code. Same-origin fetch — no IPC,
+                    // no capabilities, works in every webview.
+                    if let Some(q) = url.strip_prefix("/__open?url=") {
+                        let target = percent_decode(q);
+                        if target.starts_with("http://") || target.starts_with("https://") {
+                            if let Err(e) = tauri_plugin_opener::open_url(&target, None::<&str>) {
+                                eprintln!("[voxcomposer-desktop] failed to open {target:?}: {e}");
+                            }
+                        }
+                        let _ = request.respond(Response::empty(204));
+                        continue;
+                    }
+
                     let keys = candidate_keys(&url);
 
                     // Resolve the asset first; respond() consumes `request`, so

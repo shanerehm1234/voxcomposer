@@ -46,6 +46,11 @@ export const DeviceStatusPayload = z.object({
   rssi: z.number(),
   /** LAN IP, when the remote reports one (e.g. VoxPixel/WLED) — absent otherwise. */
   ip: z.string().optional(),
+  /** Hardware class the remote self-reports in its HELLO ("relay"|"pixel"|"skull"|…).
+   *  Absent on remotes with older firmware — fall back gracefully. */
+  kind: z.string().optional(),
+  /** Output count the hardware self-reports (relay boxes: number of relays). */
+  channels: z.number().int().optional(),
   /** The Master's friendly name for this remote, if it has one set. */
   name: z.string().optional(),
   /**

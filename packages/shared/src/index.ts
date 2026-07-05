@@ -1,4 +1,5 @@
 export * from './vox/primitives.js';
+export * from './vox/fixture.js';
 export * from './vox/device.js';
 export * from './vox/clip.js';
 export * from './vox/track.js';

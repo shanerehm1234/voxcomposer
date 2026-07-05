@@ -1,9 +1,11 @@
 import type { VoxDevice } from '@voxcomposer/shared';
 import { useState } from 'react';
 import type { DemoDevice } from '../demo/demoData.js';
+import { defaultDeviceName, kindLabel, kindToType } from '../devices/kind.js';
 import { PALETTE } from '../styles/palette.js';
+import { openExternal } from '../openExternal.js';
 import { masterWsUrl, scanForDevices, type DiscoveredDevice } from '../voxlink/client.js';
-import { getMasterConfig } from '../voxlink/master.js';
+import { getMasterConfig, masterHttpBase } from '../voxlink/master.js';
 import { AddDeviceModal } from './AddDeviceModal.js';
 import {
   IconBattery,
@@ -27,11 +29,12 @@ const DEVICE_ACCENT: Record<string, string> = {
 
 interface DevicesViewProps {
   devices: DemoDevice[];
+  master: { connected: boolean; host: string };
   onAddDevice: (device: VoxDevice) => void;
   onRemoveDevice: (id: string) => void;
 }
 
-export function DevicesView({ devices, onAddDevice, onRemoveDevice }: DevicesViewProps) {
+export function DevicesView({ devices, master, onAddDevice, onRemoveDevice }: DevicesViewProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<VoxDevice | null>(null);
   const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
@@ -109,13 +112,60 @@ export function DevicesView({ devices, onAddDevice, onRemoveDevice }: DevicesVie
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        {/* The Vox Master itself — the hub, not a Vox-Link remote, so it gets
+            its own strip driven by the HTTP/WebSocket connection state rather
+            than a device_status row. */}
+        <div
+          className={`mb-4 flex flex-wrap items-center gap-3 rounded-2xl border p-4 ${
+            master.connected ? 'border-teal/40 bg-teal/5' : 'border-border/60 bg-bg2/40'
+          }`}
+        >
+          <span
+            className={`grid h-11 w-11 place-items-center rounded-xl ${
+              master.connected ? 'bg-teal/15 text-teal-l' : 'bg-bg3/60 text-muted'
+            }`}
+          >
+            <IconChip className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="font-display text-[15px] font-semibold text-text">Vox Master</h3>
+              <StatusBadge connection={master.connected ? 'online' : 'offline'} />
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted">
+              <span className="font-mono">{master.host}</span>
+              <span> · show hub — stores shows, runs the schedule, relays Vox-Link</span>
+            </div>
+          </div>
+          <button
+            onClick={() => openExternal(masterHttpBase())}
+            className={`rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors ${
+              master.connected
+                ? 'border-teal/40 bg-teal/10 text-teal-l hover:bg-teal/20'
+                : 'border-border bg-bg3/40 text-muted hover:text-text'
+            }`}
+          >
+            Open web UI ↗
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {devices.map((d) => (
             <DeviceCard
               key={d.id}
               device={d}
               onConfigure={() => {
-                setEditing({ id: d.id, name: d.name, type: d.type, apiVersion: d.apiVersion ?? '1.0.0' });
+                setEditing({
+                  id: d.id,
+                  name: d.name,
+                  type: d.type,
+                  apiVersion: d.apiVersion ?? '1.0.0',
+                  pixelCount: d.pixelCount,
+                  relayCount: d.relayCount,
+                  relayLabels: d.relayLabels,
+                  onboard: d.onboard,
+                  fixture: d.fixture,
+                });
                 setModalOpen(true);
               }}
             />
@@ -129,11 +179,13 @@ export function DevicesView({ devices, onAddDevice, onRemoveDevice }: DevicesVie
               runScan();
             }}
             onPick={(d) => {
+              const type = kindToType(d.kind, d.ip);
               onAddDevice({
                 id: d.deviceId,
-                name: d.ip ? `VoxPixel ${d.deviceId.split(':').slice(-2).join(':')}` : `Remote ${d.deviceId}`,
-                type: d.ip ? 'pixel' : 'custom',
+                name: defaultDeviceName(d),
+                type,
                 apiVersion: '1.0.0',
+                ...(type === 'relay' && d.channels ? { relayCount: d.channels } : {}),
               });
             }}
           />
@@ -144,6 +196,7 @@ export function DevicesView({ devices, onAddDevice, onRemoveDevice }: DevicesVie
         <AddDeviceModal
           existingIds={devices.map((d) => d.id)}
           initial={editing ?? undefined}
+          deviceIp={editing ? devices.find((d) => d.id === editing.id)?.ip : undefined}
           discovered={discovered}
           scanning={scanning}
           onRescan={runScan}
@@ -301,7 +354,9 @@ function DeviceCard({ device: d, onConfigure }: { device: DemoDevice; onConfigur
           {online ? d.firmware : `Last seen ${d.lastSeen ?? 'unknown'}`}
         </span>
         <div className="flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-          <CardAction>Identify</CardAction>
+          {d.ip && (
+            <CardAction onClick={() => openExternal(`http://${d.ip}`)}>Web UI ↗</CardAction>
+          )}
           <CardAction onClick={onConfigure}>Configure</CardAction>
         </div>
       </div>
@@ -355,7 +410,7 @@ function PairCard({
               className="flex w-full items-center justify-between rounded-lg border border-border/70 bg-bg2/60 px-2.5 py-1.5 text-left text-[12px] hover:border-teal/50"
             >
               <span className="flex flex-col">
-                <span className="font-medium text-text">{d.ip ? 'VoxPixel Remote' : 'Vox-Link remote'}</span>
+                <span className="font-medium text-text">{kindLabel(d.kind, d.ip)} Remote</span>
                 <span className="font-mono text-[10px] text-muted">
                   {d.deviceId}
                   {d.ip ? ` · ${d.ip}` : ''}
@@ -503,21 +558,6 @@ export function ViewHeader({
       </div>
       <div className="ml-auto flex items-center gap-2">{actions}</div>
     </div>
-  );
-}
-
-export function GhostButton({
-  children,
-  icon,
-}: {
-  children: React.ReactNode;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <button className="flex items-center gap-2 rounded-lg border border-border/80 bg-bg3/40 px-3 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-text">
-      {icon}
-      {children}
-    </button>
   );
 }
 

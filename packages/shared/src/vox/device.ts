@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FixtureAssignment } from './fixture.js';
 import { SemVer } from './primitives.js';
 
 /** Hardware classes a paired Vox Remote can report as. */
@@ -44,6 +45,29 @@ export const VoxDevice = z.object({
   supportsFormats: z.array(AudioFormat).optional(),
   /** Codec requirement used when transcoding source audio for this device. */
   audioSpec: DeviceAudioSpec.optional(),
+  /** DMX devices: which fixture this is and its patch address (see fixture.ts). */
+  fixture: FixtureAssignment.optional(),
+  /**
+   * Pixel devices: how many LEDs this prop drives (a 35-pixel ring, a 150-px
+   * strip…). Purely informational for previews — the remote's own WLED config
+   * is the source of truth for the hardware. Set by hand today; will be
+   * pulled from device telemetry once the protocol carries it.
+   */
+  pixelCount: z.number().int().min(1).max(2048).optional(),
+  /**
+   * Relay devices: how many outputs this box has (bench prototype 2; the
+   * production VoxRelay will carry 4 or 8) and what each one switches —
+   * "Fog machine", "Air horn"… Labels index from relay 1.
+   */
+  relayCount: z.number().int().min(1).max(8).optional(),
+  relayLabels: z.array(z.string().max(24)).max(8).optional(),
+  /**
+   * The Vox Master itself: the backpack track types it hosts locally
+   * ("relay","dmx","audio"), addressed to the Master's own MAC. Dragging this
+   * device to the timeline creates one track per listed type. Absent on
+   * ordinary single-function remotes.
+   */
+  onboard: z.array(z.string()).optional(),
 });
 export type VoxDevice = z.infer<typeof VoxDevice>;
 

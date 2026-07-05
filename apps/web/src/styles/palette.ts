@@ -41,6 +41,24 @@ export function trackColor(type: string): { fill: string; accent: string } {
   return TRACK_COLORS[type] ?? TRACK_COLORS.plugin!;
 }
 
+/** Colours specific to the virtual stage renderer (see src/stage/). */
+export const STAGE_COLORS = {
+  /** Skull bone + its shading. */
+  bone: '#D9D4C5',
+  boneShade: '#A8A294',
+  /** Eye socket / nasal cavity fill. */
+  socket: '#0B0D12',
+  /** Idle (no eyes clip) pupil glimmer. */
+  eyeIdle: '#3A4152',
+  /** Card chrome. */
+  card: PALETTE.bg2,
+  cardBorder: PALETTE.border,
+  /** Relay-on indicator reuses the relay track accent. */
+  relayOn: TRACK_COLORS.relay!.accent,
+  dmxBar: PALETTE.teal,
+  audioArc: '#E8623D',
+} as const;
+
 /** Convert a `#rrggbb` hex to an `rgba()` string at the given alpha. */
 export function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');

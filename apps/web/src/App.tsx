@@ -5,12 +5,13 @@ import { ClipInspector } from './components/ClipInspector.js';
 import { DeviceSidebar } from './components/DeviceSidebar.js';
 import { DevicesView } from './components/DevicesView.js';
 import { MediaView } from './components/MediaView.js';
-import { ScheduleView } from './components/ScheduleView.js';
 import { SettingsView } from './components/SettingsView.js';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay.js';
 import { Toast, type ToastMessage } from './components/Toast.js';
-import { type DemoDevice, makeDemoState } from './demo/demoData.js';
-import { addClip, addDevice, findClip, removeDevice, replaceClip } from './timeline/edits.js';
+import { type DemoDevice, isDemoMode, makeDemoState, makeEmptyState } from './demo/demoData.js';
+import { defaultDeviceName, kindToType } from './devices/kind.js';
+import { addBytesToLibrary, importMediaFiles } from './media/library.js';
+import { addClip, addDevice, findClip, newClipId, removeDevice, replaceClip } from './timeline/edits.js';
 import { useHistory } from './timeline/history.js';
 import { Timeline } from './timeline/Timeline.js';
 import { decodeAudioFile } from './audio/analyze.js';
@@ -29,7 +30,9 @@ import {
 import { getMasterConfig, sendShowToMaster } from './voxlink/master.js';
 import { useMasterStatus } from './voxlink/useMasterStatus.js';
 
-const VIEWS = ['timeline', 'devices', 'media', 'schedule', 'settings'];
+// Scheduling deliberately has no view here: the schedule lives on the Vox
+// Master (its touchscreen or its web UI). The Composer authors shows.
+const VIEWS = ['timeline', 'devices', 'media', 'settings'];
 
 function readViewFromHash(): string {
   const h = window.location.hash.slice(1);
@@ -44,7 +47,8 @@ function readViewFromHash(): string {
 const isHttpsOrigin = window.location.protocol === 'https:';
 
 export function App() {
-  const demo = useMemo(() => makeDemoState(), []);
+  // Real installs boot empty; the hosted demo boots dressed (see isDemoMode).
+  const demo = useMemo(() => (isDemoMode() ? makeDemoState() : makeEmptyState()), []);
   const { state: show, commit, set, undo, redo } = useHistory(demo.show);
 
   const [activeView, setActiveView] = useState(readViewFromHash);
@@ -73,9 +77,24 @@ export function App() {
   // still has something to show. Without a reachable Master (no hardware on
   // hand), this is exactly the old all-demo behavior.
   const masterStatus = useMasterStatus();
+  // Devices the user explicitly removed this session — auto-attach and the
+  // onboard-Master effect both respect it, so a removal sticks.
+  const dismissedRef = useRef<Set<string>>(new Set());
+  const masterMac = masterStatus.info?.mac;
   const sidebarDevices = useMemo<DemoDevice[]>(() => {
     const telemetryById = new Map(demo.devices.map((d) => [d.id, d]));
     return show.devices.map((d) => {
+      // The Vox Master itself is the hub, not a Vox-Link remote, so it never
+      // appears in the device_status roster — its liveness follows the
+      // Master connection directly.
+      if (masterMac && d.id === masterMac) {
+        return {
+          ...d,
+          connection: masterStatus.connected ? 'online' : 'offline',
+          relayCount:
+            masterStatus.info?.onboard?.find((o) => o.type === 'relay')?.channels ?? d.relayCount,
+        } as DemoDevice;
+      }
       const t = telemetryById.get(d.id);
       const live = masterStatus.devices.get(d.id);
       if (live) {
@@ -83,6 +102,9 @@ export function App() {
           ...d,
           connection: live.online ? 'online' : 'offline',
           iconHint: t?.iconHint,
+          ip: live.ip,
+          // Hardware-reported output count wins over a manual guess.
+          relayCount: live.channels ?? d.relayCount,
           rssi: live.rssi,
           firmware: t?.firmware,
           battery: t?.battery,
@@ -105,7 +127,7 @@ export function App() {
         lastSeen: t?.lastSeen ?? (t ? undefined : 'never'),
       };
     });
-  }, [show.devices, demo.devices, masterStatus.devices]);
+  }, [show.devices, demo.devices, masterStatus.devices, masterStatus.connected, masterStatus.info, masterMac]);
 
   const remotesOnline = sidebarDevices.filter((d) => d.connection === 'online').length;
   const { canInstall, promptInstall } = useInstallPrompt();
@@ -158,16 +180,23 @@ export function App() {
   // commit per device) — commit() replaces `present` outright, so multiple
   // commits in the same effect run against the same stale `show` would lose
   // all but the last.
+  //
+  // Two guards keep this from fighting the user: only ONLINE paired remotes
+  // attach (an unplugged prop shouldn't keep resurrecting), and a device the
+  // user explicitly removed this session stays removed.
   useEffect(() => {
     const newDevices: VoxDevice[] = [];
     for (const status of masterStatus.devices.values()) {
-      if (!status.paired) continue;
+      if (!status.paired || !status.online) continue;
+      if (dismissedRef.current.has(status.deviceId)) continue;
       if (show.devices.some((d) => d.id === status.deviceId)) continue;
+      const type = kindToType(status.kind, status.ip);
       newDevices.push({
         id: status.deviceId,
-        name: status.name || status.deviceId,
-        type: status.ip ? 'pixel' : 'custom',
+        name: status.name || defaultDeviceName(status),
+        type,
         apiVersion: '1.0.0',
+        ...(type === 'relay' && status.channels ? { relayCount: status.channels } : {}),
       });
     }
     if (newDevices.length === 0) return;
@@ -179,6 +208,29 @@ export function App() {
       'success',
     );
   }, [masterStatus.devices, show, commit, showToast]);
+
+  // The Vox Master carries its own backpack I/O (relay/dmx/audio outputs). Add
+  // it to the show automatically the first time we see a connected Master, so
+  // its onboard outputs are just there — no manual "add the Master" step.
+  // Respects the dismissed set, so removing it makes it stay gone.
+  useEffect(() => {
+    const info = masterStatus.info;
+    if (!info?.mac || info.onboard.length === 0) return;
+    if (dismissedRef.current.has(info.mac)) return;
+    if (show.devices.some((d) => d.id === info.mac)) return;
+    const relay = info.onboard.find((o) => o.type === 'relay');
+    commit(
+      addDevice(show, {
+        id: info.mac,
+        name: 'Vox Master',
+        type: 'relay',
+        apiVersion: '1.0.0',
+        onboard: info.onboard.map((o) => o.type),
+        ...(relay?.channels ? { relayCount: relay.channels } : {}),
+      }),
+    );
+    showToast('Vox Master added — its onboard relay/DMX/audio outputs are ready', 'success');
+  }, [masterStatus.info, show, commit, showToast]);
 
   const handleAddDevice = useCallback(
     (device: VoxDevice) => {
@@ -193,6 +245,7 @@ export function App() {
   const handleRemoveDevice = useCallback(
     (id: string) => {
       const device = show.devices.find((d) => d.id === id);
+      dismissedRef.current.add(id);  // don't let auto-attach re-add what the user removed
       commit(removeDevice(show, id));
       if (selectedDeviceId === id) setSelectedDeviceId(null);
       showToast(`Removed “${device?.name ?? id}”`, 'info');
@@ -202,6 +255,18 @@ export function App() {
 
   // --- .vox export / import -------------------------------------------------
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+
+  const handleNewShow = useCallback(() => {
+    const ok = window.confirm(
+      'Start a new empty show? The current show will be replaced (Ctrl+Z undoes this until you close the app — Save a .vox first if you want to keep it).',
+    );
+    if (!ok) return;
+    commit(makeEmptyState().show);
+    setSelectedClipIds([]);
+    setSelectedDeviceId(null);
+    showToast('New show — add your devices, then drag audio onto the timeline', 'success');
+  }, [commit, showToast]);
 
   const handleExport = useCallback(() => {
     downloadShow(show);
@@ -232,6 +297,10 @@ export function App() {
       try {
         if (filename.toLowerCase().endsWith('.zip') || looksLikeZip(bytes)) {
           const pkg = await readShowPackage(bytes);
+          // Packaged audio belongs in the media library too, not just on clips.
+          for (const a of pkg.audio) {
+            void a.blob.arrayBuffer().then((b) => addBytesToLibrary(b, a.filename, a.blob.type));
+          }
           const byName = new Map(pkg.audio.map((a) => [a.filename, a.blob]));
           for (const track of pkg.result.show.tracks) {
             if (track.type !== 'audio') continue;
@@ -275,18 +344,28 @@ export function App() {
     [commit, showToast],
   );
 
-  // Add an audio file (picked via the open button) to the first audio track.
+  // Add an audio file (picked via the open button) to the first audio track,
+  // creating one if the show doesn't have any yet.
   const importAudioFromBytes = useCallback(
     async (bytes: ArrayBuffer, filename: string, mime: string) => {
-      const track = show.tracks.find((t) => t.type === 'audio');
+      let track = show.tracks.find((t) => t.type === 'audio');
+      let base = show;
       if (!track) {
-        showToast('No audio track yet — open the Timeline and add one', 'error');
-        return;
+        const dev = show.devices[0];
+        track = {
+          id: newClipId(),
+          deviceId: dev?.id ?? 'unassigned',
+          type: 'audio',
+          label: dev ? dev.name : 'Audio',
+          clips: [],
+        };
+        base = { ...show, tracks: [...show.tracks, track] };
       }
       try {
+        void addBytesToLibrary(bytes.slice(0), filename, mime);
         const startMs = track.clips.reduce((m, c) => Math.max(m, c.startMs + c.durationMs), 0);
         const clip = await buildAudioClip(bytes, filename, mime, track.deviceId, startMs);
-        commit(addClip(show, track.id, clip));
+        commit(addClip(base, track.id, clip));
         setSelectedClipIds([clip.id]);
         showToast(`Added “${filename}” to ${track.label}`, 'success');
       } catch {
@@ -424,10 +503,12 @@ export function App() {
         remotesOnline={remotesOnline}
         activeView={activeView}
         onSelectView={setActiveView}
+        onNewShow={handleNewShow}
+        onOpenShow={() => fileInputRef.current?.click()}
+        onImportAudio={() => audioInputRef.current?.click()}
         onExport={handleExport}
         onExportPackage={() => void handleExportPackage()}
         onSendToMaster={() => void handleSendToMaster()}
-        onImport={() => fileInputRef.current?.click()}
         onInstall={canInstall ? promptInstall : undefined}
         onShowHelp={() => setShowHelp(true)}
         livePreviewOn={livePreviewOn}
@@ -453,10 +534,32 @@ export function App() {
           e.target.value = '';
         }}
       />
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept="audio/*,.mp3,.wav,.ogg,.m4a"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          if (files.length > 0) {
+            void importMediaFiles(files).then((r) => {
+              if (r.added.length > 0) {
+                showToast(
+                  `Imported ${r.added.length} file${r.added.length === 1 ? '' : 's'} to the Media library`,
+                  'success',
+                );
+                setActiveView('media');
+              }
+              if (r.failed.length > 0) showToast(`Couldn't read: ${r.failed.join(', ')}`, 'error');
+            });
+          }
+          e.target.value = '';
+        }}
+      />
       <div className="flex min-h-0 flex-1">
         <DeviceSidebar
           devices={sidebarDevices}
-          showFiles={demo.showFiles}
           master={{ connected: masterStatus.connected, ip: getMasterConfig().host }}
           selectedDeviceId={selectedDeviceId}
           onSelectDevice={setSelectedDeviceId}
@@ -478,12 +581,12 @@ export function App() {
           {activeView === 'devices' && (
             <DevicesView
               devices={sidebarDevices}
+              master={{ connected: masterStatus.connected, host: getMasterConfig().host }}
               onAddDevice={handleAddDevice}
               onRemoveDevice={handleRemoveDevice}
             />
           )}
-          {activeView === 'media' && <MediaView media={demo.media} />}
-          {activeView === 'schedule' && <ScheduleView onNotify={showToast} />}
+          {activeView === 'media' && <MediaView onNotify={showToast} />}
           {activeView === 'settings' && (
             <SettingsView
               master={{ connected: masterStatus.connected, ip: getMasterConfig().host }}

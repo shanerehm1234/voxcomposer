@@ -67,7 +67,6 @@ export function createPluginAPI(plugin: VoxPlugin, deps: PluginHostDeps): VoxPlu
       relay().emit(event, payload);
     },
     log(...args: unknown[]) {
-      // eslint-disable-next-line no-console
       console.log(`%c[plugin ${plugin.id}]`, 'color:#AFA9EC', ...args);
     },
   };

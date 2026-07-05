@@ -23,6 +23,10 @@ export interface ConnectionResult {
 export interface DiscoveredDevice {
   deviceId: string;
   rssi: number;
+  /** Self-reported hardware class ("relay"|"pixel"|…), when the firmware sends one. */
+  kind?: string;
+  /** Self-reported output count (relay boxes: number of relays). */
+  channels?: number;
   /** LAN IP, if the remote reports one (e.g. VoxPixel/WLED) — undefined otherwise. */
   ip?: string;
 }
@@ -68,7 +72,7 @@ export function scanForDevices(url: string, gatherMs = 1200): Promise<Discovered
       const msg = decodeVoxLink(typeof e.data === 'string' ? e.data : '');
       if (!msg || msg.event !== VOX_EVENTS.deviceStatus) return;
       const p = msg.payload as DeviceStatusPayload;
-      if (p?.deviceId) found.set(p.deviceId, { deviceId: p.deviceId, rssi: p.rssi, ip: p.ip });
+      if (p?.deviceId) found.set(p.deviceId, { deviceId: p.deviceId, rssi: p.rssi, ip: p.ip, kind: p.kind, channels: p.channels });
     };
     ws.onerror = finish;
     ws.onclose = finish;

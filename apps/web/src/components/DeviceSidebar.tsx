@@ -1,14 +1,15 @@
 import type { VoxDevice } from '@voxcomposer/shared';
 import { useState } from 'react';
 import type { DemoDevice, DeviceConnection } from '../demo/demoData.js';
+import { DEVICE_DRAG_TYPE } from '../dnd.js';
+import { openExternal } from '../openExternal.js';
 import { masterWsUrl, scanForDevices, type DiscoveredDevice } from '../voxlink/client.js';
-import { getMasterConfig } from '../voxlink/master.js';
+import { getMasterConfig, masterHttpBase } from '../voxlink/master.js';
 import { AddDeviceModal } from './AddDeviceModal.js';
 import { resolveDeviceIcon } from './icons.js';
 
 interface DeviceSidebarProps {
   devices: DemoDevice[];
-  showFiles: { name: string; active: boolean }[];
   master: { connected: boolean; ip: string };
   selectedDeviceId: string | null;
   onSelectDevice: (id: string) => void;
@@ -45,7 +46,6 @@ function SignalBars({ rssi }: { rssi?: number }) {
 
 export function DeviceSidebar({
   devices,
-  showFiles,
   master,
   selectedDeviceId,
   onSelectDevice,
@@ -74,21 +74,38 @@ export function DeviceSidebar({
             const Icon = resolveDeviceIcon(d.type, d.iconHint);
             const selected = d.id === selectedDeviceId;
             const offline = d.connection === 'offline';
+            const openEditor = () => {
+              setEditing({
+                id: d.id,
+                name: d.name,
+                type: d.type,
+                apiVersion: d.apiVersion ?? '1.0.0',
+                pixelCount: d.pixelCount,
+                relayCount: d.relayCount,
+                relayLabels: d.relayLabels,
+                onboard: d.onboard,
+                fixture: d.fixture,
+              });
+              setModalOpen(true);
+            };
             return (
               <li key={d.id}>
                 <button
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(
+                      DEVICE_DRAG_TYPE,
+                      JSON.stringify({ id: d.id, name: d.name, type: d.type, onboard: d.onboard }),
+                    );
+                    e.dataTransfer.effectAllowed = 'copy';
+                  }}
                   onClick={() => onSelectDevice(d.id)}
+                  onDoubleClick={openEditor}
                   onContextMenu={(e) => {
                     e.preventDefault();
-                    setEditing({
-                      id: d.id,
-                      name: d.name,
-                      type: d.type,
-                      apiVersion: d.apiVersion ?? '1.0.0',
-                    });
-                    setModalOpen(true);
+                    openEditor();
                   }}
-                  title="Right-click to edit or remove"
+                  title="Drag onto the timeline to add its track · double-click to edit"
                   className={`group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-all duration-150 ${
                     selected
                       ? 'bg-bg3 text-text shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ring-1 ring-purple/30'
@@ -130,27 +147,6 @@ export function DeviceSidebar({
           <SidebarButton onClick={runScan}>{scanning ? 'Scanning…' : 'Scan remotes'}</SidebarButton>
         </div>
 
-        <SectionLabel className="mt-6">Show Files</SectionLabel>
-        <ul className="space-y-0.5 px-2 pb-3">
-          {showFiles.map((f) => (
-            <li key={f.name}>
-              <button
-                className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors ${
-                  f.active
-                    ? 'bg-bg3 text-text ring-1 ring-purple/30'
-                    : 'text-muted hover:bg-bg3/50 hover:text-text'
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    f.active ? 'bg-purple-l shadow-[0_0_6px_rgba(175,169,236,0.8)]' : 'bg-muted/40'
-                  }`}
-                />
-                <span className="font-mono text-xs">{f.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
       </div>
 
       <div className="border-t border-border/70 bg-bg2/40 px-4 py-3">
@@ -168,12 +164,19 @@ export function DeviceSidebar({
           </span>
           <span className="ml-auto font-mono text-[11px] text-muted">{master.ip}</span>
         </div>
+        <button
+          onClick={() => openExternal(masterHttpBase())}
+          className="mt-1.5 inline-block text-[11px] text-muted transition-colors hover:text-teal-l"
+        >
+          Open web UI ↗
+        </button>
       </div>
 
       {modalOpen && (
         <AddDeviceModal
           existingIds={devices.map((d) => d.id)}
           initial={editing ?? undefined}
+          deviceIp={editing ? devices.find((d) => d.id === editing.id)?.ip : undefined}
           discovered={discovered}
           scanning={scanning}
           onRescan={runScan}

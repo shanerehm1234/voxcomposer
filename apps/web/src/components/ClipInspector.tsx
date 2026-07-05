@@ -1,5 +1,15 @@
-import type { VoxClip, VoxShow } from '@voxcomposer/shared';
-import { useEffect, useState } from 'react';
+import {
+  compileLook,
+  EYE_STYLES,
+  type FixtureLook,
+  type FixtureProfile,
+  type VoxClip,
+  type VoxShow,
+} from '@voxcomposer/shared';
+import { useEffect, useMemo, useState } from 'react';
+import { loadFixtureProfile } from '../fixtures/vibrary.js';
+import { paramsFromClipData, PIXEL_EFFECTS } from '../pixel/engine.js';
+import { effectiveAnimation } from '../pixel/wled.js';
 import { pluginRegistry } from '../plugins/registry.js';
 import { trackColor } from '../styles/palette.js';
 import { PixelPreview } from './PixelPreview.js';
@@ -7,6 +17,19 @@ import { PixelPreview } from './PixelPreview.js';
 /** Neck-motion presets the skull board understands per axis / for speed. */
 const AXIS_MODES = ['fixed', 'wander', 'track', 'sweep', 'nod'];
 const SPEED_MODES = ['slow', 'talk', 'talk+', 'fast'];
+
+/** The nine gaze directions of the eyes look-pad, row-major. */
+const LOOK_GRID: { x: number; y: number; glyph: string }[] = [
+  { x: -1, y: -1, glyph: '↖' },
+  { x: 0, y: -1, glyph: '↑' },
+  { x: 1, y: -1, glyph: '↗' },
+  { x: -1, y: 0, glyph: '←' },
+  { x: 0, y: 0, glyph: '●' },
+  { x: 1, y: 0, glyph: '→' },
+  { x: -1, y: 1, glyph: '↙' },
+  { x: 0, y: 1, glyph: '↓' },
+  { x: 1, y: 1, glyph: '↘' },
+];
 
 interface ClipInspectorProps {
   clip: VoxClip | null;
@@ -88,6 +111,31 @@ function ClipFields({
   const neck = data.neck as Record<string, string> | undefined;
   const deviceId = typeof data.deviceId === 'string' ? data.deviceId : undefined;
   const device = show.devices.find((d) => d.id === deviceId);
+
+  // DMX clips route by their owning track's device; if that device has a
+  // fixture patched (see AddDeviceModal), the raw channel fields give way to
+  // a look editor driven by the fixture's profile.
+  const trackDevice = useMemo(() => {
+    const track = show.tracks.find((t) => t.clips.some((c) => c.id === clip.id));
+    return track ? show.devices.find((d) => d.id === track.deviceId) : undefined;
+  }, [show, clip.id]);
+  const fixture = draft.type === 'dmx' ? trackDevice?.fixture : undefined;
+  const [profile, setProfile] = useState<FixtureProfile | null>(null);
+  useEffect(() => {
+    setProfile(null);
+    if (fixture) void loadFixtureProfile(fixture.profileId).then(setProfile);
+  }, [fixture, fixture?.profileId]);
+
+  // Effect-engine params for the pixel/eyes preview (and the param editors).
+  const previewParams = useMemo(() => {
+    const base = paramsFromClipData(draft.data as Record<string, unknown>);
+    if (draft.type !== 'pixel') return { ...base, animation: 'glow' }; // eyes: a soft stand-in
+    const wledFx = typeof (draft.data as Record<string, unknown>).wledFx === 'number'
+      ? ((draft.data as Record<string, unknown>).wledFx as number)
+      : undefined;
+    return { ...base, animation: effectiveAnimation(base.animation, wledFx).animation };
+  }, [draft]);
+  const effectDef = PIXEL_EFFECTS.find((e) => e.id === String(data.animation ?? 'solid'));
 
   const patch = (changes: Partial<VoxClip>) => setDraft((d) => ({ ...d, ...changes }));
   const patchData = (changes: Record<string, unknown>) =>
@@ -216,9 +264,26 @@ function ClipFields({
         </div>
       )}
 
-      {isDmx && (
+      {isDmx && profile && fixture && (
+        <LookEditor
+          profile={profile}
+          look={(data.look as FixtureLook | undefined) ?? {}}
+          onEdit={(look) => patchData({ look })}
+          onCommit={(look) => {
+            const levels = compileLook(profile, fixture.startChannel, look);
+            commitData({ look, levels, universe: fixture.universe });
+          }}
+        />
+      )}
+
+      {isDmx && !(profile && fixture) && (
         <>
           <SectionDivider>DMX</SectionDivider>
+          {fixture && !profile && (
+            <p className="mb-2 text-[11px] text-muted">
+              Loading fixture profile… raw channels below work meanwhile.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <NumberField
               label="Universe"
@@ -252,12 +317,22 @@ function ClipFields({
         <>
           <SectionDivider>Relay</SectionDivider>
           <div className="grid grid-cols-2 gap-2">
-            <NumberField
-              label="Channel"
-              value={String(data.channel ?? 0)}
-              onChange={(v) => patchData({ channel: Math.max(0, parseInt(v) || 0) })}
-              onCommit={() => commit()}
-            />
+            <div>
+              <FieldLabel>Relay</FieldLabel>
+              <select
+                value={String(Math.max(1, Number(data.channel) || 1))}
+                onChange={(e) => commitData({ channel: Number(e.target.value) })}
+                className="w-full rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 text-[13px] text-text focus:border-purple/50 focus:outline-none"
+              >
+                {Array.from({ length: trackDevice?.relayCount ?? 4 }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {trackDevice?.relayLabels?.[n - 1]?.trim()
+                      ? `${n} · ${trackDevice.relayLabels[n - 1]}`
+                      : `Relay ${n}`}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div>
               <FieldLabel>Action</FieldLabel>
               <select
@@ -265,12 +340,22 @@ function ClipFields({
                 onChange={(e) => commitData({ action: e.target.value })}
                 className="w-full rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 text-[13px] text-text focus:border-purple/50 focus:outline-none"
               >
-                <option value="on">On</option>
+                <option value="on">On (for the clip's length)</option>
                 <option value="off">Off</option>
-                <option value="pulse">Pulse</option>
+                <option value="pulse">Pulse (one-shot)</option>
               </select>
             </div>
           </div>
+          {String(data.action ?? 'on') === 'pulse' && (
+            <div className="mt-2.5 grid grid-cols-2 gap-2">
+              <NumberField
+                label="Pulse width (ms)"
+                value={String(data.durationMs ?? 500)}
+                onChange={(v) => patchData({ durationMs: Math.max(50, parseInt(v) || 500) })}
+                onCommit={() => commit()}
+              />
+            </div>
+          )}
         </>
       )}
 
@@ -279,37 +364,104 @@ function ClipFields({
           <SectionDivider>{isPixel ? 'VoxPixel' : 'Eyes'}</SectionDivider>
           <div className="overflow-hidden rounded-lg border border-border/60 bg-bg/40">
             <PixelPreview
-              animation={String(data.animation ?? 'solid')}
-              color={String(data.color ?? '#FF6A00')}
-              brightness={isPixel ? Number(data.brightness ?? 255) : 255}
+              params={previewParams}
+              count={isPixel ? Math.min(trackDevice?.pixelCount ?? 16, 60) : 16}
             />
           </div>
-          <div className="mt-2.5">
-            <FieldLabel>Animation</FieldLabel>
-            {isPixel ? (
+
+          {(isEyes || isPixel) && (
+            <div className="mt-2.5">
+              <FieldLabel>{isPixel ? 'Effect' : 'Eye style'}</FieldLabel>
               <select
-                value={String(data.animation ?? 'solid')}
-                onChange={(e) => commitData({ animation: e.target.value })}
-                className="w-full rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 text-[13px] capitalize text-text focus:border-purple/50 focus:outline-none"
+                value={String(data.animation ?? (isPixel ? 'solid' : 'idle'))}
+                onChange={(e) =>
+                  // Changing the effect also clears any legacy WLED fields, so
+                  // old clips converge on the one built-in effect source.
+                  commitData(
+                    isPixel
+                      ? { animation: e.target.value, wledFx: undefined, palette: undefined, intensity: undefined }
+                      : { animation: e.target.value },
+                  )
+                }
+                className="w-full rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 text-[13px] text-text focus:border-purple/50 focus:outline-none"
               >
-                {['solid', 'pulse', 'glow', 'flash', 'chase', 'off'].map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
+                {isPixel
+                  ? PIXEL_EFFECTS.map((fx) => (
+                      <option key={fx.id} value={fx.id}>
+                        {fx.name}
+                      </option>
+                    ))
+                  : [...EYE_STYLES].map((a) => (
+                      <option key={a} value={a} className="capitalize">
+                        {a}
+                      </option>
+                    ))}
               </select>
-            ) : (
-              <input
-                value={String(data.animation ?? '')}
-                onChange={(e) => patchData({ animation: e.target.value })}
-                onBlur={() => commit()}
-                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                className="w-full rounded-lg border border-border/80 bg-bg/60 px-3 py-2 text-[13px] text-text focus:border-purple/50 focus:outline-none"
-              />
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Per-effect knobs — only the ones this effect actually reads. */}
+          {isPixel && effectDef && (
+            <>
+              <div className="mt-2.5 grid grid-cols-2 gap-x-2 gap-y-2.5">
+                {effectDef.uses.speed && (
+                  <ParamSlider
+                    label="Speed"
+                    min={0}
+                    max={255}
+                    value={Number(data.speed ?? 128)}
+                    onEdit={(v) => patchData({ speed: v })}
+                    onCommit={(v) => commitData({ speed: v })}
+                  />
+                )}
+                {effectDef.uses.density && (
+                  <ParamSlider
+                    label={String(data.animation) === 'lightning' ? 'Strike rate' : 'Density'}
+                    min={0}
+                    max={255}
+                    value={Number(data.density ?? 64)}
+                    onEdit={(v) => patchData({ density: v })}
+                    onCommit={(v) => commitData({ density: v })}
+                  />
+                )}
+                {effectDef.uses.size && (
+                  <ParamSlider
+                    label="Length (px)"
+                    min={1}
+                    max={30}
+                    value={Number(data.size ?? 4)}
+                    onEdit={(v) => patchData({ size: v })}
+                    onCommit={(v) => commitData({ size: v })}
+                  />
+                )}
+                {effectDef.uses.trail && (
+                  <ParamSlider
+                    label="Trail (px)"
+                    min={0}
+                    max={30}
+                    value={Number(data.trail ?? 8)}
+                    onEdit={(v) => patchData({ trail: v })}
+                    onCommit={(v) => commitData({ trail: v })}
+                  />
+                )}
+                {effectDef.uses.direction && (
+                  <div>
+                    <FieldLabel>Direction</FieldLabel>
+                    <select
+                      value={data.direction === 'reverse' ? 'reverse' : 'forward'}
+                      onChange={(e) => commitData({ direction: e.target.value })}
+                      className="w-full rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 text-[13px] text-text focus:border-purple/50 focus:outline-none"
+                    >
+                      <option value="forward">Forward</option>
+                      <option value="reverse">Reverse</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
           <div className="mt-2.5">
-            <FieldLabel>Color</FieldLabel>
+            <FieldLabel>{isPixel ? 'Color (primary)' : 'Color'}</FieldLabel>
             <div className="flex items-center gap-2">
               <input
                 type="color"
@@ -327,6 +479,35 @@ function ClipFields({
               />
             </div>
           </div>
+
+          {isPixel && effectDef?.uses.color2 && (
+            <div className="mt-2.5">
+              <div className="flex items-center justify-between">
+                <FieldLabel>{effectDef?.uses.color2 ?? 'Secondary'}</FieldLabel>
+                {typeof data.color2 === 'string' && (
+                  <button
+                    onClick={() => commitData({ color2: undefined })}
+                    className="mb-1 text-[10px] text-muted hover:text-[#E8623D]"
+                    title="Back to off/black"
+                  >
+                    off
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={String(data.color2 ?? '#000000')}
+                  onChange={(e) => commitData({ color2: e.target.value })}
+                  className="h-8 w-12 cursor-pointer rounded border border-border/80 bg-bg/60"
+                  aria-label="Secondary color"
+                />
+                <span className="font-mono text-xs text-muted">
+                  {typeof data.color2 === 'string' ? String(data.color2) : 'off (black)'}
+                </span>
+              </div>
+            </div>
+          )}
           {isPixel && (
             <div className="mt-3">
               <FieldLabel>Brightness</FieldLabel>
@@ -348,6 +529,34 @@ function ClipFields({
               </div>
             </div>
           )}
+
+          {isEyes && (
+            <div className="mt-3">
+              <FieldLabel>Looking</FieldLabel>
+              <div className="grid w-fit grid-cols-3 gap-1">
+                {LOOK_GRID.map((g) => {
+                  const active =
+                    Number(data.lookX ?? 0) === g.x && Number(data.lookY ?? 0) === g.y;
+                  return (
+                    <button
+                      key={`${g.x},${g.y}`}
+                      onClick={() => commitData({ lookX: g.x, lookY: g.y })}
+                      aria-label={`Look ${g.glyph}`}
+                      className={`grid h-8 w-8 place-items-center rounded-md text-[13px] transition-colors ${
+                        active
+                          ? 'bg-purple/30 text-purple-l ring-1 ring-purple/50'
+                          : 'bg-bg/60 text-muted ring-1 ring-inset ring-border/70 hover:text-text'
+                      }`}
+                    >
+                      {g.glyph}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[10px] text-muted">Where the eyes point during this clip</p>
+            </div>
+          )}
+
         </>
       )}
 
@@ -386,12 +595,8 @@ function ClipFields({
       {device?.inventory && (
         <>
           <SectionDivider>SD Card · {device.name}</SectionDivider>
-          <div className="mb-2.5 flex items-center justify-between text-[11px] text-muted">
-            <span>{device.inventory.length} files</span>
-            <span className="font-mono">2.1 / 32 MB</span>
-          </div>
-          <div className="mb-3 h-1 overflow-hidden rounded-full bg-bg">
-            <div className="h-full w-[7%] rounded-full bg-teal/70" />
+          <div className="mb-2.5 text-[11px] text-muted">
+            {device.inventory.length} file{device.inventory.length === 1 ? '' : 's'} on last scan
           </div>
           <ul className="space-y-1">
             {device.inventory.map((file) => {
@@ -412,6 +617,144 @@ function ClipFields({
         </>
       )}
     </div>
+  );
+}
+
+// --- DMX look editor ----------------------------------------------------------
+
+/** Friendly labels for fixture channel roles ("PAN_TILT_SPEED" → "Movement speed"). */
+const ROLE_LABELS: Record<string, string> = {
+  PAN: 'Pan',
+  TILT: 'Tilt',
+  PAN_TILT_SPEED: 'Movement speed',
+  DIMMER: 'Dimmer',
+  SHUTTER: 'Shutter / strobe',
+  FOCUS: 'Focus',
+  ZOOM: 'Zoom',
+  IRIS: 'Iris',
+  PRISM: 'Prism',
+  PRISM_ROTATION: 'Prism rotation',
+  FROST: 'Frost',
+  GOBO_ROTATION: 'Gobo rotation',
+  CTO: 'Color temp',
+  EFFECTS: 'Effects',
+};
+
+function roleLabel(role: string): string {
+  return (
+    ROLE_LABELS[role] ??
+    role
+      .toLowerCase()
+      .replace(/_/g, ' ')
+      .replace(/^\w/, (c) => c.toUpperCase())
+  );
+}
+
+/**
+ * Program the fixture by look — named controls from its profile instead of
+ * raw channel numbers. Wheel roles render their profile's named slots;
+ * everything else is a 0–255 slider. Untouched controls stay out of the look
+ * (the fixture keeps whatever its last cue set), matching how lighting desks
+ * treat unset parameters.
+ */
+function LookEditor({
+  profile,
+  look,
+  onEdit,
+  onCommit,
+}: {
+  profile: FixtureProfile;
+  look: FixtureLook;
+  onEdit: (look: FixtureLook) => void;
+  onCommit: (look: FixtureLook) => void;
+}) {
+  const wheelSlots = (role: string) =>
+    role === 'COLOR_WHEEL' ? profile.color_wheel : role === 'GOBO_WHEEL' ? profile.gobo_wheel : undefined;
+
+  return (
+    <>
+      <SectionDivider>
+        {profile.manufacturer} {profile.name} · Look
+      </SectionDivider>
+      <div className="space-y-2.5">
+        {profile.channels.map((ch) => {
+          const slots = wheelSlots(ch.role);
+          const set = look[ch.role] !== undefined;
+          if (slots && slots.length > 0) {
+            return (
+              <div key={ch.role}>
+                <FieldLabel>{ch.role === 'COLOR_WHEEL' ? 'Color' : 'Gobo'}</FieldLabel>
+                <select
+                  value={set ? String(look[ch.role]) : ''}
+                  onChange={(e) => {
+                    const next = { ...look };
+                    if (e.target.value === '') delete next[ch.role];
+                    else next[ch.role] = Number(e.target.value);
+                    onCommit(next);
+                  }}
+                  className="w-full rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 text-[13px] text-text focus:border-purple/50 focus:outline-none"
+                >
+                  <option value="">(leave as-is)</option>
+                  {slots.map((s) => (
+                    <option key={`${s.value}-${s.name}`} value={s.value}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          }
+          return (
+            <div key={ch.role}>
+              <div className="flex items-center justify-between">
+                <FieldLabel>{roleLabel(ch.role)}</FieldLabel>
+                {set && (
+                  <button
+                    onClick={() => {
+                      const next = { ...look };
+                      delete next[ch.role];
+                      onCommit(next);
+                    }}
+                    className="mb-1 text-[10px] text-muted hover:text-[#E8623D]"
+                    title="Remove from this look — the fixture keeps its previous value"
+                  >
+                    unset
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={255}
+                  aria-label={roleLabel(ch.role)}
+                  value={set ? Number(look[ch.role]) : (ch.default ?? 0)}
+                  onChange={(e) => onEdit({ ...look, [ch.role]: Number(e.target.value) })}
+                  onPointerUp={(e) =>
+                    onCommit({ ...look, [ch.role]: Number((e.target as HTMLInputElement).value) })
+                  }
+                  onKeyUp={(e) =>
+                    onCommit({ ...look, [ch.role]: Number((e.target as HTMLInputElement).value) })
+                  }
+                  className={`vox-range h-1.5 flex-1 ${set ? '' : 'opacity-40'}`}
+                />
+                <span className={`w-8 text-right font-mono text-[10px] ${set ? 'text-text' : 'text-muted/50'}`}>
+                  {set ? Number(look[ch.role]) : '—'}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+        {Object.keys(look).length > 0 && (
+          <button
+            onClick={() => onCommit({})}
+            className="rounded-md border border-border bg-bg3/40 px-2 py-1 text-[11px] text-muted transition-colors hover:text-[#E8623D]"
+          >
+            Reset look
+          </button>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -503,6 +846,42 @@ function SelectField({
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <div className="mb-1 text-[11px] font-medium text-muted">{children}</div>;
+}
+
+function ParamSlider({
+  label,
+  min,
+  max,
+  value,
+  onEdit,
+  onCommit,
+}: {
+  label: string;
+  min: number;
+  max: number;
+  value: number;
+  onEdit: (v: number) => void;
+  onCommit: (v: number) => void;
+}) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <div className="flex items-center gap-2">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          aria-label={label}
+          value={value}
+          onChange={(e) => onEdit(Number(e.target.value))}
+          onPointerUp={(e) => onCommit(Number((e.target as HTMLInputElement).value))}
+          onKeyUp={(e) => onCommit(Number((e.target as HTMLInputElement).value))}
+          className="vox-range h-1.5 flex-1"
+        />
+        <span className="w-8 text-right font-mono text-[10px] text-text">{value}</span>
+      </div>
+    </div>
+  );
 }
 
 function SectionDivider({ children }: { children: React.ReactNode }) {

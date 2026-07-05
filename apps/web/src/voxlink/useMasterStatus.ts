@@ -8,11 +8,20 @@ const HEARTBEAT_MS = 4000;
 /** Give up on a single liveness ping after this long (caps detection latency). */
 const PROBE_TIMEOUT_MS = 3500;
 
+/** The Master's own hardware, from GET /status `sys` — for the built-in
+ *  "Vox Master" device (its backpack I/O, addressed to its own MAC). */
+export interface MasterInfo {
+  mac: string;
+  onboard: { type: string; channels?: number }[];
+}
+
 export interface MasterStatus {
   /** Whether the Master is currently reachable (active heartbeat, see below). */
   connected: boolean;
   /** Latest `device_status` per device ID, as reported by the Master. */
   devices: Map<string, DeviceStatusPayload>;
+  /** The Master's own MAC + onboard I/O, when a readable /status was fetched. */
+  info: MasterInfo | null;
   /**
    * Send a Vox-Link event over the live socket (e.g. `preview_frame`). Reuses
    * the same connection this hook keeps open for `device_status`, instead of
@@ -56,6 +65,7 @@ async function masterIsAlive(httpBase: string): Promise<boolean> {
 export function useMasterStatus(): MasterStatus {
   const [connected, setConnected] = useState(false);
   const [devices, setDevices] = useState<Map<string, DeviceStatusPayload>>(new Map());
+  const [info, setInfo] = useState<MasterInfo | null>(null);
   const devicesRef = useRef(devices);
   devicesRef.current = devices;
   const wsRef = useRef<WebSocket | null>(null);
@@ -63,7 +73,6 @@ export function useMasterStatus(): MasterStatus {
   useEffect(() => {
     let cancelled = false;
     let ws: WebSocket | null = null;
-    let timer: ReturnType<typeof setInterval> | undefined;
 
     const openWs = () => {
       if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
@@ -104,7 +113,23 @@ export function useMasterStatus(): MasterStatus {
 
     const tick = async () => {
       if (cancelled) return;
-      const alive = await masterIsAlive(masterHttpBase(getMasterConfig()));
+      const base = masterHttpBase(getMasterConfig());
+      // CORS is enabled on the Master, so read /status directly for its MAC +
+      // onboard I/O. If that fails (e.g. the HTTPS demo can't reach a plain
+      // http Master), fall back to the opaque no-cors liveness probe.
+      let alive = false;
+      try {
+        const res = await fetch(`${base}/status`, { cache: 'no-store' });
+        if (res.ok) {
+          alive = true;
+          const s = (await res.json()) as { sys?: { mac?: string; onboard?: MasterInfo['onboard'] } };
+          if (!cancelled && s.sys?.mac) {
+            setInfo({ mac: s.sys.mac, onboard: s.sys.onboard ?? [] });
+          }
+        }
+      } catch {
+        alive = await masterIsAlive(base);
+      }
       if (cancelled) return;
       if (alive) {
         setConnected(true);
@@ -115,12 +140,13 @@ export function useMasterStatus(): MasterStatus {
       } else {
         setConnected(false);
         setDevices(new Map());
+        setInfo(null);
         closeWs();
       }
     };
 
     void tick();
-    timer = setInterval(() => void tick(), HEARTBEAT_MS);
+    const timer = setInterval(() => void tick(), HEARTBEAT_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -128,7 +154,6 @@ export function useMasterStatus(): MasterStatus {
     };
     // Mount-only; Settings changes are picked up on the next tick since
     // getMasterConfig() is re-read each time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const send = useCallback((event: string, payload?: unknown): boolean => {
@@ -138,5 +163,5 @@ export function useMasterStatus(): MasterStatus {
     return true;
   }, []);
 
-  return { connected, devices, send };
+  return { connected, devices, info, send };
 }

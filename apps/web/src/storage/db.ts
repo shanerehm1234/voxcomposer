@@ -7,14 +7,33 @@ import type { VoxShow } from '@voxcomposer/shared';
  */
 
 const DB_NAME = 'voxcomposer';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_META = 'meta';
 const STORE_AUDIO = 'audio';
+const STORE_MEDIA = 'media';
 const SHOW_KEY = 'currentShow';
 
 export interface StoredAudio {
   clipId: string;
   filename: string;
+  blob: Blob;
+}
+
+/**
+ * A file in the media library — file-level, unlike STORE_AUDIO which is
+ * keyed by clip id (a clip's working copy). `id` is the SHA-256 of the bytes
+ * so re-importing the same file dedupes. `peaks` is a small precomputed
+ * waveform envelope so the library renders real waveforms without decoding
+ * every file on view open.
+ */
+export interface StoredMedia {
+  id: string;
+  filename: string;
+  format: string;
+  durationMs: number;
+  sizeBytes: number;
+  addedAt: number;
+  peaks: number[];
   blob: Blob;
 }
 
@@ -28,6 +47,7 @@ function openDb(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META);
       if (!db.objectStoreNames.contains(STORE_AUDIO)) db.createObjectStore(STORE_AUDIO);
+      if (!db.objectStoreNames.contains(STORE_MEDIA)) db.createObjectStore(STORE_MEDIA);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -72,8 +92,25 @@ export async function loadAllAudio(): Promise<StoredAudio[]> {
   }
 }
 
-/** Wipe all persisted state (used by the "reset demo" action). */
+export async function saveMedia(item: StoredMedia): Promise<void> {
+  await tx(STORE_MEDIA, 'readwrite', (s) => s.put(item, item.id));
+}
+
+export async function loadAllMedia(): Promise<StoredMedia[]> {
+  try {
+    return await tx<StoredMedia[]>(STORE_MEDIA, 'readonly', (s) => s.getAll());
+  } catch {
+    return [];
+  }
+}
+
+export async function deleteMediaRecord(id: string): Promise<void> {
+  await tx(STORE_MEDIA, 'readwrite', (s) => s.delete(id));
+}
+
+/** Wipe all persisted state (used by the "clear workspace" action). */
 export async function clearAll(): Promise<void> {
   await tx(STORE_META, 'readwrite', (s) => s.clear());
   await tx(STORE_AUDIO, 'readwrite', (s) => s.clear());
+  await tx(STORE_MEDIA, 'readwrite', (s) => s.clear());
 }

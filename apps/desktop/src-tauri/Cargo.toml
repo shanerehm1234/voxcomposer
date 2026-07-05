@@ -19,3 +19,5 @@ tiny_http = "0.12"
 # Picks a free TCP port at launch so we never collide with whatever else is
 # already listening on the customer's machine.
 portpicker = "0.1"
+# Opens http(s) links in the system browser — the webview swallows target=_blank.
+tauri-plugin-opener = "2"
