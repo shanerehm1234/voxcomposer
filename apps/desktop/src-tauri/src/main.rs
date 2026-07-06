@@ -21,6 +21,7 @@
 // diagnosable from the terminal instead of an opaque 500.
 
 use tauri::{WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_dialog::DialogExt;
 use tiny_http::{Header, Response, Server};
 
 /// Asset keys to try for a given request URL, most-specific first. Tauri's
@@ -71,6 +72,34 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// A JSON HTTP response (application/json) with the given status code.
+fn json_response(status: u16, body: &str) -> Response<std::io::Cursor<Vec<u8>>> {
+    let header = Header::from_bytes(b"Content-Type".as_ref(), b"application/json".as_ref())
+        .expect("a valid Content-Type header");
+    Response::from_string(body).with_status_code(status).with_header(header)
+}
+
+/// Escape a string as a JSON string literal (including the surrounding quotes)
+/// — paths can contain backslashes (Windows) or quotes, which would otherwise
+/// break the hand-built JSON envelope.
+fn json_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 fn main() {
     let port = portpicker::pick_unused_port().expect("no free TCP port available");
 
@@ -79,14 +108,20 @@ fn main() {
         // browser through this plugin — the webview itself swallows
         // target="_blank" navigations. See openExternal() in apps/web.
         .plugin(tauri_plugin_opener::init())
+        // Native "Save As" dialog for File > Save .vox (used from Rust via the
+        // /__save asset-server route below — no JS capabilities needed).
+        .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             let resolver = app.asset_resolver();
+            // Handle for the asset-server thread so /__save can raise a native
+            // save dialog on the correct (UI) thread.
+            let handle = app.handle().clone();
             let server =
                 Server::http(("127.0.0.1", port)).expect("failed to start the local asset server");
             eprintln!("[voxcomposer-desktop] serving the editor on http://localhost:{port}");
 
             std::thread::spawn(move || {
-                for request in server.incoming_requests() {
+                for mut request in server.incoming_requests() {
                     let url = request.url().to_string();
 
                     // "Open web UI" buttons hit this endpoint (see the web
@@ -101,6 +136,58 @@ fn main() {
                             }
                         }
                         let _ = request.respond(Response::empty(204));
+                        continue;
+                    }
+
+                    // File > Save .vox: the POST body is the show bytes and the
+                    // ?name= query is the suggested filename. Raise a native
+                    // "Save As" dialog, write the bytes to the chosen path, and
+                    // reply with a small JSON envelope. The distinctive JSON is
+                    // what lets the web side tell "ran in the desktop shell"
+                    // (saved/cancelled) apart from "not the desktop" (a browser
+                    // dev server would 404 or hand back index.html) so it can
+                    // fall back to the browser's own save path.
+                    if let Some(q) = url.strip_prefix("/__save?name=") {
+                        let name = percent_decode(q);
+                        let mut body = Vec::new();
+                        if let Err(e) = request.as_reader().read_to_end(&mut body) {
+                            eprintln!("[voxcomposer-desktop] /__save read failed: {e}");
+                            let _ = request.respond(json_response(
+                                500,
+                                "{\"saved\":false,\"error\":\"read failed\"}",
+                            ));
+                            continue;
+                        }
+                        let picked = handle
+                            .dialog()
+                            .file()
+                            .set_file_name(name)
+                            .blocking_save_file();
+                        match picked.and_then(|fp| fp.into_path().ok()) {
+                            Some(path) => match std::fs::write(&path, &body) {
+                                Ok(()) => {
+                                    let body = format!(
+                                        "{{\"saved\":true,\"path\":{}}}",
+                                        json_string(&path.to_string_lossy())
+                                    );
+                                    let _ = request.respond(json_response(200, &body));
+                                }
+                                Err(e) => {
+                                    eprintln!("[voxcomposer-desktop] /__save write failed: {e}");
+                                    let _ = request.respond(json_response(
+                                        500,
+                                        "{\"saved\":false,\"error\":\"write failed\"}",
+                                    ));
+                                }
+                            },
+                            None => {
+                                // User dismissed the dialog.
+                                let _ = request.respond(json_response(
+                                    200,
+                                    "{\"saved\":false,\"cancelled\":true}",
+                                ));
+                            }
+                        }
                         continue;
                     }
 

@@ -21,3 +21,6 @@ tiny_http = "0.12"
 portpicker = "0.1"
 # Opens http(s) links in the system browser — the webview swallows target=_blank.
 tauri-plugin-opener = "2"
+# Native "Save As" dialog for the /__save route (File > Save .vox). Called from
+# Rust on the asset-server thread, so it needs no JS capabilities/IPC.
+tauri-plugin-dialog = "2"

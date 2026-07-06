@@ -13,6 +13,80 @@ export function downloadShow(show: VoxShow): void {
   triggerDownload(blob, `${safeName(show.name)}.vox`);
 }
 
+export interface SaveResult {
+  /** Where the save actually went. 'dialog' = user chose a folder (desktop
+   *  shell or the browser File System Access picker); 'download' = fell back to
+   *  a plain download into the browser's default folder. */
+  method: 'dialog' | 'download';
+  /** True if the user dismissed the save dialog (nothing was written). */
+  cancelled?: boolean;
+  /** The chosen path/filename, when the platform reveals it. */
+  path?: string;
+}
+
+/**
+ * Save the show as a `.vox`, preferring a real "choose a folder" dialog over a
+ * silent download. Three tiers, in order:
+ *  1. Desktop shell: POST to the `/__save` asset-server route, which raises a
+ *     native OS "Save As" dialog and writes the file (see apps/desktop main.rs).
+ *  2. Browser with the File System Access API (Chrome/Edge): `showSaveFilePicker`.
+ *  3. Anything else: a plain download into the default folder (prior behavior).
+ * The desktop route replies with a distinctive JSON envelope so we can tell it
+ * apart from a dev server's 404 / index.html fallback and degrade correctly.
+ */
+export async function saveShow(show: VoxShow): Promise<SaveResult> {
+  const filename = `${safeName(show.name)}.vox`;
+  const data = serializeShow(show);
+
+  // 1. Desktop shell native dialog.
+  try {
+    const res = await fetch(`/__save?name=${encodeURIComponent(filename)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: data,
+    });
+    const env = (await res.json().catch(() => null)) as
+      | { saved?: boolean; cancelled?: boolean; path?: string }
+      | null;
+    if (env && env.saved) return { method: 'dialog', path: env.path };
+    if (env && env.cancelled) return { method: 'dialog', cancelled: true };
+    // No recognizable envelope => not the desktop shell; fall through.
+  } catch {
+    // Route unreachable => not the desktop shell; fall through.
+  }
+
+  // 2. Browser File System Access API.
+  const showSaveFilePicker = (
+    window as unknown as {
+      showSaveFilePicker?: (opts: unknown) => Promise<{
+        name: string;
+        createWritable: () => Promise<{ write: (d: string) => Promise<void>; close: () => Promise<void> }>;
+      }>;
+    }
+  ).showSaveFilePicker;
+  if (typeof showSaveFilePicker === 'function') {
+    try {
+      const handle = await showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: 'Vox show', accept: { 'application/json': ['.vox'] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(data);
+      await writable.close();
+      return { method: 'dialog', path: handle.name };
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        return { method: 'dialog', cancelled: true };
+      }
+      // Other errors: fall through to a plain download.
+    }
+  }
+
+  // 3. Plain download.
+  downloadShow(show);
+  return { method: 'download' };
+}
+
 /** Trigger a browser download of an arbitrary blob. */
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);

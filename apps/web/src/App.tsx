@@ -21,7 +21,7 @@ import { registerAsset } from './audio/registry.js';
 import { useInstallPrompt } from './pwa/useInstallPrompt.js';
 import { clearAll, loadAllAudio, loadShowFromDb, saveAudioBlob, saveShow } from './storage/db.js';
 import {
-  downloadShow,
+  saveShow as saveShowToFile,
   downloadShowPackage,
   looksLikeZip,
   parseShowBytes,
@@ -274,9 +274,16 @@ export function App() {
     showToast('New show — add your devices, then drag audio onto the timeline', 'success');
   }, [commit, showToast]);
 
-  const handleExport = useCallback(() => {
-    downloadShow(show);
-    showToast(`Exported “${show.name}”`, 'success');
+  const handleExport = useCallback(async () => {
+    const r = await saveShowToFile(show);
+    if (r.cancelled) return; // user dismissed the Save dialog — say nothing
+    if (r.method === 'download') {
+      showToast(`Saved “${show.name}” to your downloads`, 'success');
+    } else if (r.path) {
+      showToast(`Saved “${show.name}” → ${r.path}`, 'success');
+    } else {
+      showToast(`Saved “${show.name}”`, 'success');
+    }
   }, [show, showToast]);
 
   const handleExportPackage = useCallback(async () => {

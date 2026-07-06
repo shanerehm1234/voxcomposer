@@ -144,8 +144,8 @@ export function AppHeader({
                 />
                 <div className="my-1 h-px bg-border/60" />
                 <ExportItem
-                  title="Save .vox"
-                  desc="Download this show (also Ctrl+S)"
+                  title="Save .vox…"
+                  desc="Choose where to save (also Ctrl+S)"
                   onClick={() => {
                     onExport();
                     setFileOpen(false);
