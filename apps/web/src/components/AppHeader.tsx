@@ -52,7 +52,7 @@ export function AppHeader({
   const [exportOpen, setExportOpen] = useState(false);
   const [fileOpen, setFileOpen] = useState(false);
   return (
-    <header className="relative flex items-center gap-4 border-b border-border/70 bg-bg2/80 px-4 py-2.5 backdrop-blur">
+    <header className="relative z-50 flex items-center gap-4 border-b border-border/70 bg-bg2/80 px-4 py-2.5 backdrop-blur">
       {/* Brand */}
       <div className="flex items-center gap-2.5 pr-1">
         <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-purple to-purple-d shadow-[0_0_12px_rgba(83,74,183,0.45)]">
