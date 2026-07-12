@@ -84,6 +84,10 @@ export function Timeline({
 }: TimelineProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Hidden picker + the timeline position a double-click on an audio track
+  // requested, so the chosen file lands where the user clicked.
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const audioDropPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const selectOne = useCallback(
     (id: string | null) => onSelectClips(id ? [id] : []),
@@ -672,6 +676,19 @@ export function Timeline({
     [show, onCommit, selectOne, onNotify],
   );
 
+  // A file chosen via the double-click-to-place picker lands at the saved spot.
+  const onAudioFilePicked = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = ''; // let the same file be picked again next time
+      if (!file) return;
+      const { x, y } = audioDropPos.current;
+      const { name, type } = file;
+      void file.arrayBuffer().then((b) => importAudioBytes(b, name, type, x, y));
+    },
+    [importAudioBytes],
+  );
+
   const onDragOver = useCallback((e: React.DragEvent) => {
     if (
       e.dataTransfer.types.includes('Files') ||
@@ -877,9 +894,15 @@ export function Timeline({
       if (cx < 0) return;
       const idx = trackIndexAtY(y, draftRef.current.tracks.length);
       const track = idx >= 0 ? draftRef.current.tracks[idx] : undefined;
-      // Audio clips come from dropping a file; everything else is created here.
-      if (!track || track.type === 'audio') return;
+      if (!track) return;
       if (clipAtPoint(draftRef.current, viewportRef.current, cx, y)) return; // not on a clip
+      // Audio clips need a source file: double-click opens the picker and drops
+      // the chosen file right here. Everything else is created inline below.
+      if (track.type === 'audio') {
+        audioDropPos.current = { x: cx, y };
+        audioInputRef.current?.click();
+        return;
+      }
 
       const startMs = Math.max(0, snap(xToMs(viewportRef.current, cx), true));
       const { durationMs, data } = defaultClipFor(track.type);
@@ -1209,6 +1232,13 @@ export function Timeline({
           onDoubleClick={onDoubleClick}
           onWheel={onWheel}
           onContextMenu={onContextMenu}
+        />
+        <input
+          ref={audioInputRef}
+          type="file"
+          accept="audio/*"
+          className="hidden"
+          onChange={onAudioFilePicked}
         />
 
         {menu && (
