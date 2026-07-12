@@ -13,6 +13,7 @@ import { effectiveAnimation } from '../pixel/wled.js';
 import { pluginRegistry } from '../plugins/registry.js';
 import { trackColor } from '../styles/palette.js';
 import { PixelPreview } from './PixelPreview.js';
+import { EyePreview } from './EyePreview.js';
 
 /** Neck-motion presets the skull board understands per axis / for speed. */
 const AXIS_MODES = ['fixed', 'wander', 'track', 'sweep', 'nod'];
@@ -363,10 +364,19 @@ function ClipFields({
         <>
           <SectionDivider>{isPixel ? 'VoxPixel' : 'Eyes'}</SectionDivider>
           <div className="overflow-hidden rounded-lg border border-border/60 bg-bg/40">
-            <PixelPreview
-              params={previewParams}
-              count={isPixel ? Math.min(trackDevice?.pixelCount ?? 16, 60) : 16}
-            />
+            {isEyes ? (
+              <EyePreview
+                color={String(data.color ?? '#FF6A00')}
+                lookX={Number(data.lookX ?? 0)}
+                lookY={Number(data.lookY ?? 0)}
+                animation={String(data.animation ?? 'idle')}
+              />
+            ) : (
+              <PixelPreview
+                params={previewParams}
+                count={Math.min(trackDevice?.pixelCount ?? 16, 60)}
+              />
+            )}
           </div>
 
           {(isEyes || isPixel) && (
