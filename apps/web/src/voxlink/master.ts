@@ -71,6 +71,29 @@ export async function playOnMaster(): Promise<boolean> {
   }
 }
 
+/**
+ * Play a sequence of library shows as a playlist (`POST /playlist/play`): the
+ * Master sequences through them, looping the whole list if `loop`. `gapMs` is
+ * the pause between shows (0 = the Master's current gap).
+ */
+export async function playPlaylistOnMaster(
+  slugs: string[],
+  loop = false,
+  gapMs = 0,
+): Promise<boolean> {
+  if (slugs.length === 0) return false;
+  try {
+    const res = await fetch(`${masterHttpBase()}/playlist/play`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ slugs, loop, gapMs }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export interface LibraryShow {
   slug: string;
   name: string;
