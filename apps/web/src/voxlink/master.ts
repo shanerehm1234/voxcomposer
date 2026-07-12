@@ -90,6 +90,30 @@ export async function listMasterShows(): Promise<LibraryShow[]> {
   }
 }
 
+/** Make a library show the active one (`POST /activate?slug=`) — Play then runs it. */
+export async function activateMasterShow(slug: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${masterHttpBase()}/activate?slug=${encodeURIComponent(slug)}`, {
+      method: 'POST',
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Delete a library show from the Master (`DELETE /show?slug=`). */
+export async function deleteMasterShow(slug: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${masterHttpBase()}/show?slug=${encodeURIComponent(slug)}`, {
+      method: 'DELETE',
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // --- Scheduler (vox_schedule on the Master — see VOXMASTER's docs/SCHEDULER.md) ---
 // Same shape as the firmware's voxschedule::Schedule::serialize()/parse():
 //   { version, playlists: [{name, showSlugs[], loop}],

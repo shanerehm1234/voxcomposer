@@ -6,6 +6,7 @@ import { DeviceSidebar } from './components/DeviceSidebar.js';
 import { DevicesView } from './components/DevicesView.js';
 import { MediaView } from './components/MediaView.js';
 import { SettingsView } from './components/SettingsView.js';
+import { ShowsView } from './components/ShowsView.js';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay.js';
 import { Toast, type ToastMessage } from './components/Toast.js';
 import { type DemoDevice, isDemoMode, makeDemoState, makeEmptyState } from './demo/demoData.js';
@@ -32,7 +33,7 @@ import { useMasterStatus } from './voxlink/useMasterStatus.js';
 
 // Scheduling deliberately has no view here: the schedule lives on the Vox
 // Master (its touchscreen or its web UI). The Composer authors shows.
-const VIEWS = ['timeline', 'devices', 'media', 'settings'];
+const VIEWS = ['timeline', 'devices', 'media', 'shows', 'settings'];
 
 function readViewFromHash(): string {
   const h = window.location.hash.slice(1);
@@ -600,6 +601,12 @@ export function App() {
             />
           )}
           {activeView === 'media' && <MediaView onNotify={showToast} />}
+          {activeView === 'shows' && (
+            <ShowsView
+              master={{ connected: masterStatus.connected, host: getMasterConfig().host }}
+              onNotify={showToast}
+            />
+          )}
           {activeView === 'settings' && (
             <SettingsView
               master={{ connected: masterStatus.connected, ip: getMasterConfig().host }}
