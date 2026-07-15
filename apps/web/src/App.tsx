@@ -14,6 +14,7 @@ import { defaultDeviceName, kindToType } from './devices/kind.js';
 import { addBytesToLibrary, getMedia, importMediaFiles, type MediaFile } from './media/library.js';
 import { addClip, addDevice, findClip, newClipId, removeDevice, replaceClip } from './timeline/edits.js';
 import { useHistory } from './timeline/history.js';
+import { setPluginShow } from './plugins/host.js';
 import { Timeline } from './timeline/Timeline.js';
 import { decodeAudioFile } from './audio/analyze.js';
 import { isAcceptedAudio, isAcceptedAudioName } from './audio/format.js';
@@ -51,6 +52,10 @@ export function App() {
   // Real installs boot empty; the hosted demo boots dressed (see isDemoMode).
   const demo = useMemo(() => (isDemoMode() ? makeDemoState() : makeEmptyState()), []);
   const { state: show, commit, set, undo, redo } = useHistory(demo.show);
+
+  // Keep the plugin host's view of the show current, so a plugin's
+  // api.getCurrentShow() (and anything reading the live show) sees real data.
+  useEffect(() => setPluginShow(show), [show]);
 
   const [activeView, setActiveView] = useState(readViewFromHash);
 
