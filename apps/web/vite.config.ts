@@ -1,9 +1,19 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Single source of truth for the app version shown in Settings: this package's
+// version, injected at build time as __APP_VERSION__ (see vite-env.d.ts).
+const pkgVersion = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8'),
+).version as string;
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(pkgVersion),
+  },
   // Relative asset paths so the build works under any subpath
   // (e.g. served from /voxcomposerapp/demo/). Safe because the app uses
   // hash-based routing — the server only ever serves index.html at the root.

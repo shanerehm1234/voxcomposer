@@ -1,6 +1,6 @@
 {
   "name": "voxcomposer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Browser-based PWA for designing and playing back synchronized animatronic shows for haunted attractions.",
   "license": "MIT",

@@ -209,7 +209,7 @@ export function SettingsView({ master, onReset }: SettingsViewProps) {
 
           <Section title="About">
             <Row label="App version">
-              <span className="font-mono text-[13px] text-muted">0.1.0</span>
+              <span className="font-mono text-[13px] text-muted">{__APP_VERSION__}</span>
             </Row>
             <Row label=".vox format">
               <span className="font-mono text-[13px] text-muted">v{VOX_FORMAT_VERSION}</span>

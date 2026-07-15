@@ -1,8 +1,8 @@
 {
   "name": "@voxcomposer/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Native Mac/Windows/Linux build of Vox Composer — see docs/DESKTOP_PACKAGING.md. Tauri shell that serves the embedded web build over http://localhost and opens a window on it; no Docker, no Node runtime, nothing for the customer to install.",
+  "description": "Native Mac/Windows/Linux build of Vox Composer \u2014 see docs/DESKTOP_PACKAGING.md. Tauri shell that serves the embedded web build over http://localhost and opens a window on it; no Docker, no Node runtime, nothing for the customer to install.",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

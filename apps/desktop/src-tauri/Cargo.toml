@@ -1,6 +1,6 @@
 [package]
 name = "voxcomposer-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "Native desktop wrapper around Vox Composer"
 edition = "2021"
 
