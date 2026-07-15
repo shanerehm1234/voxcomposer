@@ -69,9 +69,12 @@ export async function transcodeToWav(bytes: ArrayBuffer): Promise<ArrayBuffer> {
 
 /** List the `/audio` files on an OcularVox device's SD via its C3 web API. */
 export async function fetchDeviceAudio(deviceIp: string): Promise<string[]> {
+  // No Content-Type header on purpose: it keeps this a CORS "simple request" so
+  // the browser skips the preflight OPTIONS (the C3 only answers GET/POST). The
+  // C3 ignores the content type and just reads the body. Response CORS headers
+  // come from the device's guard() (esp32c3/main/web.c).
   const res = await fetch(`http://${deviceIp}/api/files`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ dir: '/audio' }),
   });
   if (!res.ok) throw new Error(`listing /audio failed: HTTP ${res.status}`);
