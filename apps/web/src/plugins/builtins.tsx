@@ -105,6 +105,45 @@ const genericUdp: VoxPlugin = definePlugin({
       .sendUDP(host, num(clip, 'port', 0), new TextEncoder().encode(str(clip, 'payload')))
       .catch((e) => api.log('UDP send failed', e));
   },
+  renderInspector(clip, { onChange }) {
+    const host = str(clip, 'host');
+    const port = num(clip, 'port', 0);
+    const payload = str(clip, 'payload');
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <label style={{ ...labelStyle, flex: 2 }}>
+            <span style={capStyle}>Host (IP)</span>
+            <input
+              style={fieldStyle}
+              value={host}
+              placeholder="192.168.1.40"
+              onChange={(e) => onChange({ host: e.target.value })}
+            />
+          </label>
+          <label style={{ ...labelStyle, flex: 1 }}>
+            <span style={capStyle}>Port</span>
+            <input
+              style={fieldStyle}
+              type="number"
+              value={port || ''}
+              placeholder="21324"
+              onChange={(e) => onChange({ port: Number(e.target.value) || 0 })}
+            />
+          </label>
+        </div>
+        <label style={labelStyle}>
+          <span style={capStyle}>Payload (text)</span>
+          <input
+            style={fieldStyle}
+            value={payload}
+            placeholder="message to send"
+            onChange={(e) => onChange({ payload: e.target.value })}
+          />
+        </label>
+      </div>
+    );
+  },
 });
 
 export const BUILTIN_PLUGINS: VoxPlugin[] = [

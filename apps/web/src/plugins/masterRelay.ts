@@ -29,7 +29,18 @@ export function makeMasterRelay(): MasterRelay {
         body: JSON.stringify(spec),
       });
     },
-    udp: () => Promise.reject(new Error('UDP relay not available yet')),
+    async udp(host, port, data) {
+      // The browser can't open sockets — the Master sends the datagram for us
+      // (POST /relay/udp). Payload is base64 so it's binary-safe (Art-Net/OSC).
+      let bin = '';
+      for (const b of data) bin += String.fromCharCode(b);
+      const res = await fetch(`${masterHttpBase()}/relay/udp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host, port, data: btoa(bin) }),
+      });
+      if (!res.ok) throw new Error(`UDP relay failed: HTTP ${res.status}`);
+    },
     osc: () => Promise.reject(new Error('OSC relay not available yet')),
     mqtt: () => Promise.reject(new Error('MQTT relay not available yet')),
     emit: () => {
