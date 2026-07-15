@@ -1,5 +1,6 @@
 import type { VoxShow } from '@voxcomposer/shared';
 import { serializeShow } from '../vox/voxFile.js';
+import { bakeShow } from '../plugins/bake.js';
 
 /**
  * Connection config for the Vox Master, persisted in localStorage so the
@@ -48,10 +49,12 @@ export interface SendResult {
 export async function sendShowToMaster(show: VoxShow): Promise<SendResult> {
   const url = `${masterHttpBase()}/show`;
   try {
+    // Bake plugin clips (Hue/HA) into concrete HTTP actions the Master can
+    // replay unattended. Only in the uploaded copy — never the on-disk .vox.
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: serializeShow(show),
+      body: serializeShow(bakeShow(show)),
     });
     if (!res.ok) return { ok: false, error: `Master returned HTTP ${res.status}` };
     const summary = (await res.json().catch(() => ({}))) as SendResult;
