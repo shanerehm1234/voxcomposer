@@ -70,11 +70,16 @@ path via the existing bridge protocol — mirror `rp_ota_post` in
 e.g.:
 
 ```
-POST /api/upload?path=/audio/growl.wav        (body = WAV bytes)
+POST /api/upload?path=/audio/growl.wav&crc=<crc32>   (body = WAV bytes)
   → OVP_FILE_OPEN {"path":"/audio/growl.wav","size":N}
   → OVP_FILE_DATA (2 KB chunks)
-  → OVP_FILE_CLOSE
+  → OVP_FILE_CLOSE {"crc32":<crc32>}    (RP2040 rejects a mismatch)
 ```
+
+The Composer computes the standard IEEE CRC-32 of the WAV bytes (`crc32()` in
+`audio/sync.ts`, byte-for-byte the RP2040's `crc32_step`) and passes it as
+`?crc=`; the C3 forwards it to `FILE_CLOSE`, so a corrupted transfer is
+rejected on the card instead of silently writing a bad file.
 
 The RP2040 `FILE_OPEN` handler must accept an SD path (create/truncate under
 FatFS) in addition to `flash:*`. The Composer POSTs directly to the device's C3
