@@ -385,7 +385,9 @@ If you're an assistant generating a plugin from a device's API docs, produce
 - [ ] `pnpm --filter <name> typecheck` passes clean.
 
 Do **not** import Node APIs, open sockets directly, add build tooling beyond
-`tsc`, or reach outside `clip.data` for state. Model your file on
-`examples/plugins/home-assistant/src/index.tsx` — it hits every one of these
-points.
+`tsc`, or reach outside `clip.data`/plugin config for state. For a **full**
+reference that hits every point above — setup, config, live dropdowns,
+`compileClip` — model your file on the shipped integrations
+`apps/web/src/plugins/hue.tsx` and `homeAssistant.tsx`. The
+`examples/plugins/*` packages are minimal skeletons for the basic structure.
 ```
