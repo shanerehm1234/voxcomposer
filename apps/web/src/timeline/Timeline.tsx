@@ -755,6 +755,26 @@ export function Timeline({
   // its one native track type.
   const addDeviceTracks = useCallback(
     (device: { id: string; name: string; type: string; onboard?: string[] }) => {
+      // A plugin dragged from the sidebar (device.type is a plugin trackType) —
+      // add a single plugin lane (not bound to a device), matching + Track.
+      if (pluginRegistry.forTrackType(device.type)) {
+        if (draftRef.current.tracks.some((t) => t.type === device.type)) {
+          onNotify?.(`“${device.name}” is already on the timeline`, 'info');
+          return;
+        }
+        const next = {
+          ...draftRef.current,
+          tracks: [
+            ...draftRef.current.tracks,
+            { id: newClipId(), deviceId: 'unassigned', type: device.type, label: device.name, clips: [] },
+          ],
+        };
+        draftRef.current = next;
+        onCommit(next);
+        dirtyRef.current = true;
+        onNotify?.(`Added a ${device.name} track`, 'success');
+        return;
+      }
       const trackTypes =
         device.onboard && device.onboard.length > 0
           ? device.onboard // the Vox Master: one lane per backpack output type

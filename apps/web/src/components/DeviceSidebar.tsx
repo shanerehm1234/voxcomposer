@@ -2,11 +2,17 @@ import type { VoxDevice } from '@voxcomposer/shared';
 import { useState } from 'react';
 import type { DemoDevice, DeviceConnection } from '../demo/demoData.js';
 import { DEVICE_DRAG_TYPE } from '../dnd.js';
+import { pluginRegistry } from '../plugins/registry.js';
+import { registerBuiltins } from '../plugins/builtins.js';
+import { getPluginConfig } from '../plugins/config.js';
 import { openExternal } from '../openExternal.js';
 import { masterWsUrl, scanForDevices, type DiscoveredDevice } from '../voxlink/client.js';
 import { getMasterConfig, masterHttpBase } from '../voxlink/master.js';
 import { AddDeviceModal } from './AddDeviceModal.js';
 import { resolveDeviceIcon } from './icons.js';
+
+// Ensure the built-in plugins are registered so the Plugins section can list them.
+registerBuiltins();
 
 interface DeviceSidebarProps {
   devices: DemoDevice[];
@@ -147,6 +153,47 @@ export function DeviceSidebar({
           <SidebarButton onClick={runScan}>{scanning ? 'Scanning…' : 'Scan remotes'}</SidebarButton>
         </div>
 
+        <SectionLabel>Plugins</SectionLabel>
+        <ul className="space-y-0.5 px-2">
+          {pluginRegistry.list().map((p) => {
+            const configured = p.isConfigured ? p.isConfigured(getPluginConfig(p.id)) : true;
+            return (
+              <li key={p.id}>
+                <button
+                  draggable
+                  onDragStart={(e) => {
+                    // Reuse the device-drop plumbing: the timeline turns a
+                    // plugin trackType into a plugin lane (see addDeviceTracks).
+                    e.dataTransfer.setData(
+                      DEVICE_DRAG_TYPE,
+                      JSON.stringify({ id: p.id, name: p.name, type: p.trackType }),
+                    );
+                    e.dataTransfer.effectAllowed = 'copy';
+                  }}
+                  title="Drag onto the timeline to add this plugin's track"
+                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-text/90 transition-all duration-150 hover:bg-bg3/50"
+                >
+                  <span
+                    className="grid h-4 w-4 shrink-0 place-items-center rounded font-display text-[8px] font-bold"
+                    style={{ backgroundColor: `${p.color ?? '#534AB7'}33`, color: p.color ?? '#AFA9EC' }}
+                  >
+                    {p.name.slice(0, 1)}
+                  </span>
+                  <span className="flex-1 truncate font-medium">{p.name}</span>
+                  {!configured && (
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+                      style={{ backgroundColor: '#F5A62322', color: '#F5A623' }}
+                      title="Set up in Settings → Plugins"
+                    >
+                      setup
+                    </span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </div>
 
       <div className="border-t border-border/70 bg-bg2/40 px-4 py-3">
