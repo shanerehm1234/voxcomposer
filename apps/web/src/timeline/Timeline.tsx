@@ -5,6 +5,8 @@ import { isAcceptedAudio } from '../audio/format.js';
 import { buildAudioClip } from '../audio/import.js';
 import { copyAsset, getAsset } from '../audio/registry.js';
 import { trackColor } from '../styles/palette.js';
+import { pluginRegistry } from '../plugins/registry.js';
+import { registerBuiltins } from '../plugins/builtins.js';
 import { saveAudioBlob } from '../storage/db.js';
 import {
   IconLoop,
@@ -74,6 +76,10 @@ interface TimelineProps {
       | null,
   ) => void;
 }
+
+// Register the built-in plugins so the "+ Track" menu can list them (Hue, Home
+// Assistant, HTTP, …). Idempotent + safe to call at module load.
+registerBuiltins();
 
 /**
  * The custom Canvas timeline. State that changes per animation frame (playhead,
@@ -1026,12 +1032,16 @@ export function Timeline({
               : type === 'eyes'
                 ? ['skull']
                 : ['skull', 'audio'];
-      const dev = cur.devices.find((d) => wants.includes(d.type)) ?? cur.devices[0];
+      // A plugin track (Hue/HA/HTTP/…) isn't bound to a paired device — it acts
+      // through the plugin's own config — so label it by the plugin, not a
+      // device it happens to sit next to.
+      const plugin = pluginRegistry.forTrackType(type);
+      const dev = plugin ? undefined : (cur.devices.find((d) => wants.includes(d.type)) ?? cur.devices[0]);
       const track = {
         id: newClipId(),
-        deviceId: dev?.id ?? 'unassigned',
+        deviceId: plugin ? 'unassigned' : (dev?.id ?? 'unassigned'),
         type,
-        label: dev ? dev.name : `New ${type}`,
+        label: plugin ? plugin.name : dev ? dev.name : `New ${type}`,
         clips: [],
       };
       const next = { ...cur, tracks: [...cur.tracks, track] };
@@ -1234,6 +1244,24 @@ export function Timeline({
                       style={{ backgroundColor: trackColor(t).accent }}
                     />
                     {label} track
+                  </button>
+                ))}
+                {/* Registered plugins (Hue, Home Assistant, HTTP, …) — each owns
+                    a custom track type, so it can be added as a lane too. */}
+                {pluginRegistry.list().length > 0 && (
+                  <div className="my-1 border-t border-border/60" />
+                )}
+                {pluginRegistry.list().map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => addTrack(p.trackType)}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-text transition-colors hover:bg-purple/15"
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-sm"
+                      style={{ backgroundColor: p.color ?? '#AFA9EC' }}
+                    />
+                    {p.name} track
                   </button>
                 ))}
               </div>
