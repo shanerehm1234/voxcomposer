@@ -1,7 +1,10 @@
 import { VOX_FORMAT_VERSION, VOX_LINK_API_VERSION } from '@voxcomposer/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { VoxPlugin } from '@voxcomposer/plugin-sdk';
 import { registerBuiltins } from '../plugins/builtins.js';
 import { pluginRegistry } from '../plugins/registry.js';
+import { getPluginConfig, setPluginConfig, subscribePluginConfig } from '../plugins/config.js';
+import { getPluginApi } from '../plugins/host.js';
 import { masterWsUrl, testMasterConnection } from '../voxlink/client.js';
 import { getMasterConfig, setMasterConfig } from '../voxlink/master.js';
 import { IconCheck, IconChip, IconRefresh } from './icons.js';
@@ -151,33 +154,7 @@ export function SettingsView({ master, onReset }: SettingsViewProps) {
           <Section title="Plugins" desc="Extend Vox Composer with custom track types and integrations.">
             <div className="space-y-1.5">
               {pluginRegistry.list().map((p) => (
-                <div
-                  key={p.id}
-                  className="flex items-center gap-3 rounded-lg border border-border/60 bg-bg/30 px-3 py-2.5"
-                >
-                  <span
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg font-display text-xs font-bold"
-                    style={{ backgroundColor: `${p.color ?? '#534AB7'}22`, color: p.color ?? '#AFA9EC' }}
-                  >
-                    {p.name.slice(0, 2)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] font-medium text-text">{p.name}</span>
-                      <span className="rounded bg-bg3/60 px-1.5 py-0.5 font-mono text-[10px] text-muted">
-                        v{p.version}
-                      </span>
-                      <span className="rounded bg-purple-d/50 px-1.5 py-0.5 text-[10px] text-purple-l">
-                        {p.trackType}
-                      </span>
-                    </div>
-                    <p className="truncate text-[11px] text-muted">{p.description}</p>
-                  </div>
-                  <span className="flex items-center gap-1 rounded-md bg-teal/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-teal-l ring-1 ring-inset ring-teal/25">
-                    <span className="h-1.5 w-1.5 rounded-full bg-teal" />
-                    Built-in
-                  </span>
-                </div>
+                <PluginRow key={p.id} plugin={p} />
               ))}
             </div>
             <div className="mt-3 flex items-center gap-2">
@@ -280,6 +257,76 @@ function Row({
         {desc && <div className="text-[11px] text-muted">{desc}</div>}
       </div>
       {children}
+    </div>
+  );
+}
+
+/**
+ * One plugin in the list. If the plugin ships a setup UI (`renderSetup`) it gets
+ * a Set up / Configured button that expands the plugin's own pairing/token panel
+ * inline, and a "Needs setup" badge driven by `isConfigured`. Config changes are
+ * observed so the badge + button flip the moment the plugin saves.
+ */
+function PluginRow({ plugin }: { plugin: VoxPlugin }) {
+  const [open, setOpen] = useState(false);
+  const [config, setCfg] = useState(() => getPluginConfig(plugin.id));
+  useEffect(() => subscribePluginConfig(plugin.id, () => setCfg({ ...getPluginConfig(plugin.id) })), [plugin.id]);
+
+  const hasSetup = !!plugin.renderSetup;
+  const configured = plugin.isConfigured ? plugin.isConfigured(config) : true;
+
+  return (
+    <div className="rounded-lg border border-border/60 bg-bg/30">
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        <span
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg font-display text-xs font-bold"
+          style={{ backgroundColor: `${plugin.color ?? '#534AB7'}22`, color: plugin.color ?? '#AFA9EC' }}
+        >
+          {plugin.name.slice(0, 2)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-medium text-text">{plugin.name}</span>
+            <span className="rounded bg-bg3/60 px-1.5 py-0.5 font-mono text-[10px] text-muted">
+              v{plugin.version}
+            </span>
+            <span className="rounded bg-purple-d/50 px-1.5 py-0.5 text-[10px] text-purple-l">
+              {plugin.trackType}
+            </span>
+          </div>
+          <p className="truncate text-[11px] text-muted">{plugin.description}</p>
+        </div>
+        {hasSetup && !configured && (
+          <span
+            className="rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ring-1 ring-inset"
+            style={{ backgroundColor: '#F5A62318', color: '#F5A623', borderColor: '#F5A62340' }}
+          >
+            Needs setup
+          </span>
+        )}
+        {hasSetup ? (
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-md border border-border/70 bg-bg/50 px-2.5 py-1 text-[12px] text-text transition-colors hover:border-purple/50"
+          >
+            {open ? 'Close' : configured ? 'Configured' : 'Set up'}
+          </button>
+        ) : (
+          <span className="flex items-center gap-1 rounded-md bg-teal/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-teal-l ring-1 ring-inset ring-teal/25">
+            <span className="h-1.5 w-1.5 rounded-full bg-teal" />
+            Built-in
+          </span>
+        )}
+      </div>
+      {open && hasSetup && (
+        <div className="border-t border-border/60 px-3 py-3">
+          {plugin.renderSetup!({
+            config,
+            save: (patch) => setPluginConfig(plugin.id, patch),
+            api: getPluginApi(plugin),
+          })}
+        </div>
+      )}
     </div>
   );
 }

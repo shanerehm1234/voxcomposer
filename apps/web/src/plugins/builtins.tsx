@@ -1,6 +1,8 @@
 import type { VoxClip } from '@voxcomposer/shared';
 import { definePlugin, type VoxPlugin } from '@voxcomposer/plugin-sdk';
 import { pluginRegistry } from './registry.js';
+import { huePlugin } from './hue.js';
+import { homeAssistantPlugin } from './homeAssistant.js';
 
 /**
  * The plugins Vox Composer ships with in v1. They're authored with the same
@@ -102,7 +104,12 @@ const genericUdp: VoxPlugin = definePlugin({
   },
 });
 
-export const BUILTIN_PLUGINS: VoxPlugin[] = [genericHttp, genericUdp];
+export const BUILTIN_PLUGINS: VoxPlugin[] = [
+  huePlugin,
+  homeAssistantPlugin,
+  genericHttp,
+  genericUdp,
+];
 
 /** Register the built-ins once. Safe to call repeatedly. */
 export function registerBuiltins(): void {

@@ -15,6 +15,31 @@ export type PluginPermission =
 export type OscArg = number | string | boolean;
 
 /**
+ * A declarative side effect a plugin "bakes" for a clip via
+ * {@link VoxPlugin.compileClip}. It is written into the exported .vox so the Vox
+ * Master can replay it at cue time with no laptop present — this is what lets a
+ * Hue/HA cue fire on a scheduled show running unattended. Keep it plain data:
+ * no closures, no plugin code runs on the Master.
+ */
+export interface BakedHttpAction {
+  kind: 'http';
+  method: 'GET' | 'PUT' | 'POST' | 'PATCH' | 'DELETE';
+  url: string;
+  headers?: Record<string, string>;
+  /** Pre-serialized request body (e.g. JSON.stringify(...)). */
+  body?: string;
+}
+
+export type BakedAction = BakedHttpAction;
+
+/**
+ * Plugin-scoped persistent configuration (bridge IP + key, HA host + token, …).
+ * Set up ONCE by the user and stored globally by the host, keyed by plugin id —
+ * never per-clip, never re-entered. Values are JSON-serializable.
+ */
+export type PluginConfig = Record<string, unknown>;
+
+/**
  * Static description of a plugin. Distributed in the bundle and shown in the
  * install/permissions prompt.
  */
@@ -65,6 +90,15 @@ export interface VoxPluginAPI {
   /** Emit a custom event to the Master. Requires `master`. */
   emitToMaster(event: string, payload: unknown): void;
 
+  /**
+   * This plugin's persisted, global configuration (see {@link PluginConfig}).
+   * Returns a snapshot; mutate via {@link setConfig}. No permission required —
+   * config is plugin-scoped storage, not a capability.
+   */
+  getConfig(): PluginConfig;
+  /** Merge a patch into this plugin's persisted config and save it. */
+  setConfig(patch: PluginConfig): void;
+
   /** Write to the plugin console shown in Developer mode. */
   log(...args: unknown[]): void;
 }
@@ -73,6 +107,23 @@ export interface VoxPluginAPI {
 export interface InspectorContext {
   /** Commit changed clip payload data back to the show (undoable). */
   onChange: (data: Record<string, unknown>) => void;
+  /** This plugin's persisted global config (read-only snapshot). */
+  config: PluginConfig;
+  /** The plugin's runtime API — use `sendHTTP` to populate live lists. */
+  api: VoxPluginAPI;
+}
+
+/**
+ * Context for a plugin's one-time setup UI (pairing, tokens). Rendered from the
+ * plugin's card in the Device manager, not per clip.
+ */
+export interface SetupContext {
+  /** Current persisted config. */
+  config: PluginConfig;
+  /** Merge + persist a config patch (e.g. the paired bridge key). */
+  save: (patch: PluginConfig) => void;
+  /** The plugin's runtime API — use `sendHTTP` to discover/pair/fetch. */
+  api: VoxPluginAPI;
 }
 
 /**
@@ -97,4 +148,26 @@ export interface VoxPlugin extends VoxPluginManifest {
 
   /** React UI shown in the clip inspector for clips on this plugin's track. */
   renderInspector?(clip: VoxClip, ctx: InspectorContext): ReactNode;
+
+  /**
+   * React UI for the plugin's one-time setup (bridge pairing, HA token). Shown
+   * on the plugin's card in the Device manager. Return `null` for no setup.
+   * Whether the plugin still needs setup is reported by {@link isConfigured}.
+   */
+  renderSetup?(ctx: SetupContext): ReactNode;
+
+  /**
+   * Whether the plugin is fully set up given its persisted config. Drives the
+   * "needs setup" badge and whether clips can be added. Defaults to always-true
+   * when omitted.
+   */
+  isConfigured?(config: PluginConfig): boolean;
+
+  /**
+   * Bake a clip into a plain, serializable {@link BakedAction} to embed in the
+   * exported .vox, so the Master can replay it unattended at cue time. Given the
+   * plugin's global config so per-clip data need only hold the selection (which
+   * room/entity), not the credentials. Return `null` to bake nothing.
+   */
+  compileClip?(clip: VoxClip, config: PluginConfig): BakedAction | null;
 }

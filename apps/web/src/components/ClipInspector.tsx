@@ -11,6 +11,8 @@ import { loadFixtureProfile } from '../fixtures/vibrary.js';
 import { paramsFromClipData, PIXEL_EFFECTS } from '../pixel/engine.js';
 import { effectiveAnimation } from '../pixel/wled.js';
 import { pluginRegistry } from '../plugins/registry.js';
+import { getPluginConfig } from '../plugins/config.js';
+import { getPluginApi } from '../plugins/host.js';
 import { trackColor } from '../styles/palette.js';
 import { PixelPreview } from './PixelPreview.js';
 import { EyePreview } from './EyePreview.js';
@@ -211,7 +213,11 @@ function ClipFields({
       {plugin?.renderInspector && (
         <>
           <SectionDivider>{plugin.name}</SectionDivider>
-          {plugin.renderInspector(draft, { onChange: (d) => commitData(d) })}
+          {plugin.renderInspector(draft, {
+            onChange: (d) => commitData(d),
+            config: getPluginConfig(plugin.id),
+            api: getPluginApi(plugin),
+          })}
         </>
       )}
 

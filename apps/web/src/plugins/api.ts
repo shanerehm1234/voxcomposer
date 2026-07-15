@@ -1,5 +1,6 @@
 import type { VoxDevice, VoxShow } from '@voxcomposer/shared';
 import type { OscArg, PluginPermission, VoxPlugin, VoxPluginAPI } from '@voxcomposer/plugin-sdk';
+import { getPluginConfig, setPluginConfig } from './config.js';
 
 /**
  * Transport used to relay a plugin's network requests to the Vox Master over
@@ -65,6 +66,12 @@ export function createPluginAPI(plugin: VoxPlugin, deps: PluginHostDeps): VoxPlu
     emitToMaster(event, payload) {
       require('master');
       relay().emit(event, payload);
+    },
+    getConfig() {
+      return getPluginConfig(plugin.id);
+    },
+    setConfig(patch) {
+      setPluginConfig(plugin.id, patch);
     },
     log(...args: unknown[]) {
       console.log(`%c[plugin ${plugin.id}]`, 'color:#AFA9EC', ...args);
