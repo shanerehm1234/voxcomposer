@@ -31,13 +31,21 @@ type** and owns everything about it:
         └── clip.data = { bridgeIp, id, on, bri, color, ... }   ← you define this
 ```
 
-When a clip on your track plays (live preview **or** a scheduled show), the host
-calls your **`onFrame`** hook so you can do the side effect — an HTTP call, a UDP
-packet, whatever. You also provide:
+There are **two ways your clip fires**, and a real integration wants both:
+
+- **Live preview** (Composer open) → the host calls your **`onFrame`** hook.
+- **Unattended** (a scheduled show running on the Vox Master, no laptop) → the
+  Master can't run your JS, so it replays the plain action your **`compileClip`**
+  baked into the show. Implement `compileClip` or your cue won't fire on the
+  haunt's nightly run.
+
+You also provide:
 
 - **`summarizeClip`** — the one-line label drawn on the clip in the timeline.
 - **`renderInspector`** — a small React form shown when the clip is selected, so
   the user can edit `clip.data`.
+- **`renderSetup` / `isConfigured`** — one-time pairing/token setup, stored in
+  global plugin config (not per clip).
 
 That's the whole contract. You never touch the canvas, the scheduler, or the
 network socket directly — the host does that for you.
@@ -226,6 +234,56 @@ renderInspector(clip, { onChange }) {
 
 Runs once when the plugin loads. Rarely needed.
 
+### `compileClip(clip, config)` — run on the Master, unattended ⭐
+
+`onFrame` only fires while the Composer is driving preview/playback. A haunt runs
+its shows **from the Vox Master with no laptop present**, and the Master can't run
+your JavaScript. So for a cue to fire on a scheduled show, bake it into a plain,
+serializable action the Master replays at cue time:
+
+```ts
+compileClip(clip, config) {
+  const d = clip.data as { url?: string };
+  if (!d.url) return null;
+  return {
+    kind: 'http',
+    method: 'POST',
+    url: d.url,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hello: 'world' }),
+  }; // a BakedHttpAction — pure data, no closures
+}
+```
+
+When the show is sent to the Master, the host calls `compileClip` for every clip
+on your track and embeds the result. **If your integration should work on an
+unattended show (almost all do), implement `compileClip`.** Keep `onFrame` too so
+live preview still fires instantly — build both from one shared helper so they
+never drift (see the Hue/HA built-ins for the pattern).
+
+### `renderSetup(ctx)` + `isConfigured(config)` — one-time setup ⭐
+
+Credentials and pairing are entered **once**, globally — never per clip. Store
+them in plugin config (`ctx.save(patch)` / `api.getConfig()`), not `clip.data`:
+
+```tsx
+renderSetup(ctx) {                       // shown on your card in Settings → Plugins
+  return (
+    <button onClick={async () => {
+      const res = await ctx.api.sendHTTP('http://bridge/api', { method: 'POST', body: '...' });
+      const key = (await res.json())[0]?.success?.username;
+      if (key) ctx.save({ key });         // persisted globally, forever
+    }}>Pair</button>
+  );
+},
+isConfigured(config) { return !!config.key; },  // drives the "Needs setup" badge
+```
+
+Then `renderInspector` and `compileClip` read `config` (or `api.getConfig()`) for
+the credentials and fetch live lists (rooms, entities) via `ctx.api.sendHTTP` —
+so every clip is just a dropdown of the user's own stuff. This is the difference
+between a developer toy and an end-user integration.
+
 ---
 
 ## 6. The API surface (`VoxPluginAPI`)
@@ -238,6 +296,8 @@ sendHTTP(url, init?): Promise<Response>                 // needs 'network'
 getCurrentShow(): VoxShow                               // needs 'show-read'
 getDevice(deviceId): VoxDevice | undefined             // needs 'devices'
 emitToMaster(event, payload): void                     // needs 'master'
+getConfig(): PluginConfig                               // your persisted global config
+setConfig(patch): void                                  // merge + persist config
 log(...args): void                                     // always available
 ```
 
@@ -286,7 +346,9 @@ app: add the device, drop a clip, fill in the inspector, hit play, and watch
 
 Plugins live in their own git repo so anyone can install them:
 
-1. Put the package (the three files from §2) in a new repo.
+1. Put the package (the three files from §2) in a new repo. Name it
+   **`vox-plugin-<slug>`** (e.g. `vox-plugin-hue`) and add the GitHub topic
+   **`vox-plugin`** so the in-app browser and other authors can find it.
 2. Tag a release (`v0.1.0`).
 3. Users install by pointing Vox Composer's plugin loader at your repo/bundle
    (Settings → Plugins), approve the permissions prompt, and it registers.
@@ -308,10 +370,18 @@ If you're an assistant generating a plugin from a device's API docs, produce
 - [ ] The **minimum** `permissions` (usually `['network']`).
 - [ ] A typed `interface XxxClipData` for `clip.data`, plus a `read(clip)` helper
       that fills in safe defaults for every field.
+- [ ] A shared `buildAction(data, config)` helper returning a `BakedHttpAction`
+      or `null`, used by **both** `onFrame` (live) and `compileClip` (unattended
+      Master) so they never drift.
 - [ ] `onFrame` that reads the config, **returns early if incomplete**, fires via
       `api.send*`, and `.catch()`es with `api.log`.
+- [ ] `compileClip(clip, config)` returning that same baked action — **required**
+      for the cue to fire on an unattended, Master-scheduled show.
+- [ ] If the device needs credentials/pairing: `renderSetup` + `isConfigured`,
+      storing config via `ctx.save` / `api.setConfig` (never in `clip.data`).
 - [ ] `summarizeClip` returning a short, scannable label.
-- [ ] `renderInspector` — a controlled form calling `onChange(partial)`.
+- [ ] `renderInspector` — a controlled form calling `onChange(partial)`, reading
+      live lists (rooms/entities) from `ctx.api.sendHTTP` where possible.
 - [ ] `pnpm --filter <name> typecheck` passes clean.
 
 Do **not** import Node APIs, open sockets directly, add build tooling beyond
