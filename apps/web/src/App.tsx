@@ -688,8 +688,10 @@ export function App() {
             <DevicesView
               devices={sidebarDevices}
               master={{ connected: masterStatus.connected, host: getMasterConfig().host }}
+              show={show}
               onAddDevice={handleAddDevice}
               onRemoveDevice={handleRemoveDevice}
+              onNotify={showToast}
             />
           )}
           {activeView === 'media' && (

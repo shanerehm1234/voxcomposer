@@ -1,6 +1,7 @@
-import type { VoxDevice } from '@voxcomposer/shared';
+import type { VoxDevice, VoxShow } from '@voxcomposer/shared';
 import { useState } from 'react';
 import type { DemoDevice } from '../demo/demoData.js';
+import { AudioSyncPanel } from './AudioSyncPanel.js';
 import { defaultDeviceName, kindLabel, kindToType } from '../devices/kind.js';
 import { PALETTE } from '../styles/palette.js';
 import { openExternal } from '../openExternal.js';
@@ -30,11 +31,20 @@ const DEVICE_ACCENT: Record<string, string> = {
 interface DevicesViewProps {
   devices: DemoDevice[];
   master: { connected: boolean; host: string };
+  show: VoxShow;
   onAddDevice: (device: VoxDevice) => void;
   onRemoveDevice: (id: string) => void;
+  onNotify: (text: string, kind?: 'info' | 'success' | 'error') => void;
 }
 
-export function DevicesView({ devices, master, onAddDevice, onRemoveDevice }: DevicesViewProps) {
+export function DevicesView({
+  devices,
+  master,
+  show,
+  onAddDevice,
+  onRemoveDevice,
+  onNotify,
+}: DevicesViewProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<VoxDevice | null>(null);
   const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
@@ -189,6 +199,9 @@ export function DevicesView({ devices, master, onAddDevice, onRemoveDevice }: De
               });
             }}
           />
+        </div>
+        <div className="mt-5">
+          <AudioSyncPanel show={show} devices={devices} onNotify={onNotify} />
         </div>
       </div>
 
