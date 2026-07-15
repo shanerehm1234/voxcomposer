@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { VoxShow } from '@voxcomposer/shared';
-import { deviceAudioName, missingAudio, neededAudio } from '../sync.js';
+import { crc32, deviceAudioName, missingAudio, neededAudio } from '../sync.js';
 
 describe('deviceAudioName', () => {
   it('normalizes any source to a .wav basename', () => {
@@ -46,6 +46,20 @@ describe('neededAudio', () => {
       { id: 'e', deviceId: 'SKULL', type: 'eyes', label: 'E', clips: [] } as unknown as VoxShow['tracks'][number],
     ]);
     expect(neededAudio(s, 'SKULL')).toEqual([]);
+  });
+});
+
+describe('crc32', () => {
+  const bytes = (s: string) => new Uint8Array([...s].map((c) => c.charCodeAt(0)));
+  it('matches the standard IEEE CRC-32 test vector (RP2040 crc32_step)', () => {
+    // "123456789" → 0xCBF43926, the canonical check value; must equal the
+    // firmware's ~xfer_crc so FILE_CLOSE accepts the upload.
+    expect(crc32(bytes('123456789'))).toBe(0xcbf43926);
+  });
+  it('is 0 for empty input and unsigned', () => {
+    expect(crc32(new Uint8Array())).toBe(0);
+    expect(crc32(bytes('a'))).toBeGreaterThanOrEqual(0);
+    expect(crc32(bytes('The quick brown fox jumps over the lazy dog'))).toBe(0x414fa339);
   });
 });
 

@@ -47,6 +47,20 @@ export function missingAudio(needed: string[], present: string[]): string[] {
 
 // --- browser + live pieces ---------------------------------------------------
 
+/**
+ * Standard reflected CRC-32 (poly 0xEDB88320, init 0xFFFFFFFF, final complement)
+ * — byte-for-byte identical to the OcularVox RP2040's crc32_step, so an upload's
+ * `&crc=` is verified on the card (FILE_CLOSE rejects a mismatch).
+ */
+export function crc32(bytes: Uint8Array): number {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    c ^= bytes[i]!;
+    for (let j = 0; j < 8; j++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+  }
+  return (~c) >>> 0;
+}
+
 /** Decode any source audio and re-encode as mono 16-bit WAV bytes for the SD. */
 export async function transcodeToWav(bytes: ArrayBuffer): Promise<ArrayBuffer> {
   const decoded = await decodeAudioBytes(bytes);
@@ -70,7 +84,9 @@ export async function fetchDeviceAudio(deviceIp: string): Promise<string[]> {
  * endpoint in AUDIO_SYNC.md — streams over the bridge to the RP2040 SD).
  */
 export async function uploadDeviceAudio(deviceIp: string, name: string, wav: ArrayBuffer): Promise<void> {
-  const res = await fetch(`http://${deviceIp}/api/upload?path=${encodeURIComponent(`/audio/${name}`)}`, {
+  const crc = crc32(new Uint8Array(wav));
+  const path = encodeURIComponent(`/audio/${name}`);
+  const res = await fetch(`http://${deviceIp}/api/upload?path=${path}&crc=${crc}`, {
     method: 'POST',
     body: wav,
   });
