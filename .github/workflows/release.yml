@@ -1,0 +1,82 @@
+name: Release
+
+# Push a version tag (e.g. `v0.1.0`) and GitHub Actions builds the native
+# installers and publishes them to a GitHub Release automatically. Uses the
+# workflow's built-in GITHUB_TOKEN — no personal access token or secrets to
+# configure. See docs/DESKTOP_PACKAGING.md ("Releases: automated via CI").
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # tauri-action creates the Release + uploads the installers
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Built on 22.04 (not 24.04) so the .deb/.AppImage link against an
+          # older glibc and run on the widest range of Mint/Ubuntu installs.
+          - platform: ubuntu-22.04
+          # macOS/Windows can be added here later (they want code-signing certs
+          # to avoid the "unidentified developer" warning — see the packaging doc).
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux bundling dependencies
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # No pnpm version here: action-setup reads packageManager (pnpm@11.7.0)
+      # from package.json — matching ci.yml and local dev.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      # tauri-action runs the tauri.conf.json beforeBuildCommand (which builds
+      # apps/web), then bundles, creates the Release for this tag, and uploads
+      # the .deb + .AppImage to it.
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Vox Composer ${{ github.ref_name }}'
+          releaseBody: |
+            Native Vox Composer for Linux — no terminal, Docker, or Node needed.
+
+            - **.deb** — install via your Software Manager (recommended on Linux Mint / Ubuntu).
+            - **.AppImage** — mark executable and run; no installation.
+          releaseDraft: false
+          prerelease: false
+          args: --bundles deb appimage

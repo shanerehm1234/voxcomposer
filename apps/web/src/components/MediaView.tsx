@@ -24,8 +24,12 @@ type Filter = 'all' | 'wav' | 'mp3' | 'ogg' | 'm4a';
 
 export function MediaView({
   onNotify,
+  onAddToTimeline,
 }: {
   onNotify: (text: string, kind?: 'info' | 'success' | 'error') => void;
+  /** Place a library file on the timeline (Media and Timeline are separate
+   * tabs, so dragging between them is impossible — this is the add path). */
+  onAddToTimeline: (item: MediaFile) => void;
 }) {
   const media = useMediaLibrary();
   const previewingId = usePreviewingId();
@@ -158,6 +162,7 @@ export function MediaView({
                 item={m}
                 previewing={previewingId === m.id}
                 onPreview={() => togglePreview(m.id)}
+                onAdd={() => onAddToTimeline(m)}
                 onDelete={() => {
                   void deleteMedia(m.id);
                   onNotify(`Removed “${m.filename}” from the library`, 'info');
@@ -184,11 +189,13 @@ function MediaCard({
   item,
   previewing,
   onPreview,
+  onAdd,
   onDelete,
 }: {
   item: MediaFile;
   previewing: boolean;
   onPreview: () => void;
+  onAdd: () => void;
   onDelete: () => void;
 }) {
   const color = FORMAT_COLOR[item.format] ?? '#718096';
@@ -199,8 +206,9 @@ function MediaCard({
         e.dataTransfer.setData(MEDIA_DRAG_TYPE, item.id);
         e.dataTransfer.effectAllowed = 'copy';
       }}
-      title="Drag onto the timeline to place this audio"
-      className="group cursor-grab overflow-hidden rounded-xl border border-border/70 bg-bg2/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-purple/40 hover:bg-bg2 active:cursor-grabbing"
+      onDoubleClick={onAdd}
+      title="Double-click (or “Add to timeline”) to place this audio on the timeline"
+      className="group cursor-pointer overflow-hidden rounded-xl border border-border/70 bg-bg2/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-purple/40 hover:bg-bg2"
     >
       <div className="relative h-16 border-b border-border/50 bg-bg/40 px-3 pt-2">
         <WaveformThumb peaks={item.peaks} color={color} height={48} />
@@ -225,7 +233,13 @@ function MediaCard({
           {item.filename}
         </h3>
         <div className="mt-2 flex items-center justify-between text-[11px] text-muted">
-          <span>{(item.sizeBytes / 1024).toFixed(0)} KB</span>
+          <button
+            onClick={onAdd}
+            className="rounded-md border border-border/70 bg-bg/50 px-2 py-1 text-[11px] font-medium text-purple-l transition-colors hover:border-purple/50 hover:bg-purple/10"
+            title="Add this file to the timeline"
+          >
+            ＋ Add to timeline
+          </button>
           <button
             onClick={onDelete}
             className="rounded px-1.5 py-0.5 text-muted/70 opacity-0 transition-opacity hover:bg-[#E8623D]/10 hover:text-[#E8623D] group-hover:opacity-100"

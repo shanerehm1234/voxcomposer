@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.voxcomposer.desktop",
   "build": {
-    "beforeDevCommand": "pnpm --filter @voxcomposer/web build",
+    "beforeDevCommand": "pnpm --filter @voxcomposer/web dev",
+    "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "pnpm --filter @voxcomposer/web build",
     "frontendDist": "../../web/dist"
   },

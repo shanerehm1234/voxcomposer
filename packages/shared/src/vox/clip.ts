@@ -176,11 +176,34 @@ export const EYE_STYLES = [
 export type EyeStyle = (typeof EYE_STYLES)[number];
 
 /**
- * Eyes (OcularVox) clip — style + colour + gaze direction, relayed verbatim.
- * `lookX`/`lookY` steer where the eyes point (-1 = full left/up, +1 = full
- * right/down, 0 = straight ahead); omitted means straight ahead.
+ * The OcularVox's built-in eye textures, in the device's own index order
+ * (matches `builtin_eye_sets` in the RP2040 firmware). These ship on every
+ * board; SD-card eyes come live from the device inventory (device_scan) and are
+ * merged with these in the clip editor's Eye picker. Keep in sync with the
+ * firmware if its built-in set changes — same maintenance contract as
+ * EYE_STYLES.
+ */
+export const BUILT_IN_EYES = [
+  'Human Blue',
+  'Doe',
+  'Newt',
+  'Goat',
+  'Dragon',
+  'Cat',
+  'Owl',
+  'Nauga',
+  'Terminator',
+] as const;
+
+/**
+ * Eyes (OcularVox) clip — which eye + style + colour + gaze direction, relayed
+ * verbatim. `eye` selects the texture by name (a BUILT_IN_EYES entry or an SD
+ * `.eye` basename); omitted keeps the device's current eye. `animation` is the
+ * behaviour/style. `lookX`/`lookY` steer where the eyes point (-1 = full
+ * left/up, +1 = full right/down, 0 = straight ahead); omitted = straight ahead.
  */
 export const EyesClipData = z.object({
+  eye: z.string().optional(),
   animation: z.string().default('idle'),
   color: z
     .string()

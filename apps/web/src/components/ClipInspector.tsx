@@ -1,6 +1,6 @@
 import {
+  BUILT_IN_EYES,
   compileLook,
-  EYE_STYLES,
   type FixtureLook,
   type FixtureProfile,
   type VoxClip,
@@ -39,9 +39,18 @@ interface ClipInspectorProps {
   onChange: (next: VoxClip) => void;
   /** How many clips are selected (the inspector edits the primary one). */
   selectionCount?: number;
+  /** Live SD inventory per device (UPPERCASE MAC), from the Master's /status —
+   * drives the Eye picker's SD-card list. */
+  deviceInventories?: Map<string, string[]>;
 }
 
-export function ClipInspector({ clip, show, onChange, selectionCount = 0 }: ClipInspectorProps) {
+export function ClipInspector({
+  clip,
+  show,
+  onChange,
+  selectionCount = 0,
+  deviceInventories,
+}: ClipInspectorProps) {
   return (
     <aside className="hidden w-72 flex-col overflow-y-auto border-l border-border/70 bg-bg2/60 lg:flex">
       <div className="flex items-center gap-2 px-4 pb-2 pt-4">
@@ -67,7 +76,13 @@ export function ClipInspector({ clip, show, onChange, selectionCount = 0 }: Clip
               {selectionCount} clips selected · editing primary
             </div>
           )}
-          <ClipFields key={clip.id} clip={clip} show={show} onChange={onChange} />
+          <ClipFields
+            key={clip.id}
+            clip={clip}
+            show={show}
+            onChange={onChange}
+            deviceInventories={deviceInventories}
+          />
         </>
       ) : (
         <EmptyState />
@@ -91,10 +106,12 @@ function ClipFields({
   clip,
   show,
   onChange,
+  deviceInventories,
 }: {
   clip: VoxClip;
   show: VoxShow;
   onChange: (next: VoxClip) => void;
+  deviceInventories?: Map<string, string[]>;
 }) {
   // Local editable copy. Re-seeded when the selected/committed clip changes
   // (selection, undo, or a timeline drag) — never mid-keystroke, since text
@@ -189,21 +206,6 @@ function ClipFields({
           }
           onCommit={() => commit()}
         />
-      </div>
-
-      <div className="mt-2.5">
-        <FieldLabel>Device</FieldLabel>
-        <select
-          value={deviceId ?? ''}
-          onChange={(e) => commitData({ deviceId: e.target.value })}
-          className="w-full rounded-lg border border-border/80 bg-bg/60 px-3 py-2 text-[13px] text-text focus:border-purple/50 focus:outline-none"
-        >
-          {show.devices.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
       </div>
 
       {plugin?.renderInspector && (
@@ -379,33 +381,75 @@ function ClipFields({
             )}
           </div>
 
-          {(isEyes || isPixel) && (
+          {isEyes &&
+            (() => {
+              // Which eye texture the skull shows for this clip: the 9 built-in
+              // eyes plus whatever .eye files the device reported (live from the
+              // Master's /status, falling back to any inventory saved on the
+              // device). Empty = leave the current eye as-is.
+              const liveInv =
+                deviceInventories?.get((trackDevice?.id ?? deviceId ?? '').toUpperCase()) ??
+                deviceInventories?.get((deviceId ?? '').toUpperCase());
+              const sdEyes = (liveInv ?? trackDevice?.inventory ?? device?.inventory ?? []).filter(
+                (n) => !BUILT_IN_EYES.includes(n as (typeof BUILT_IN_EYES)[number]),
+              );
+              return (
+                <div className="mt-2.5">
+                  <FieldLabel>Eye</FieldLabel>
+                  <select
+                    value={String(data.eye ?? '')}
+                    onChange={(e) => commitData({ eye: e.target.value || undefined })}
+                    className="w-full rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 text-[13px] text-text focus:border-purple/50 focus:outline-none"
+                  >
+                    <option value="">(keep current)</option>
+                    <optgroup label="Built-in">
+                      {BUILT_IN_EYES.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {sdEyes.length > 0 && (
+                      <optgroup label="SD card">
+                        {sdEyes.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                  {sdEyes.length === 0 && (
+                    <p className="mt-1 text-[10px] text-muted">
+                      Connect the skull &amp; scan devices to list its SD-card eyes.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+          {isPixel && (
             <div className="mt-2.5">
-              <FieldLabel>{isPixel ? 'Effect' : 'Eye style'}</FieldLabel>
+              <FieldLabel>Effect</FieldLabel>
               <select
-                value={String(data.animation ?? (isPixel ? 'solid' : 'idle'))}
+                value={String(data.animation ?? 'solid')}
                 onChange={(e) =>
                   // Changing the effect also clears any legacy WLED fields, so
                   // old clips converge on the one built-in effect source.
-                  commitData(
-                    isPixel
-                      ? { animation: e.target.value, wledFx: undefined, palette: undefined, intensity: undefined }
-                      : { animation: e.target.value },
-                  )
+                  commitData({
+                    animation: e.target.value,
+                    wledFx: undefined,
+                    palette: undefined,
+                    intensity: undefined,
+                  })
                 }
                 className="w-full rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 text-[13px] text-text focus:border-purple/50 focus:outline-none"
               >
-                {isPixel
-                  ? PIXEL_EFFECTS.map((fx) => (
-                      <option key={fx.id} value={fx.id}>
-                        {fx.name}
-                      </option>
-                    ))
-                  : [...EYE_STYLES].map((a) => (
-                      <option key={a} value={a} className="capitalize">
-                        {a}
-                      </option>
-                    ))}
+                {PIXEL_EFFECTS.map((fx) => (
+                  <option key={fx.id} value={fx.id}>
+                    {fx.name}
+                  </option>
+                ))}
               </select>
             </div>
           )}
@@ -470,25 +514,27 @@ function ClipFields({
               </div>
             </>
           )}
-          <div className="mt-2.5">
-            <FieldLabel>{isPixel ? 'Color (primary)' : 'Color'}</FieldLabel>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={String(data.color ?? '#FF6A00')}
-                onChange={(e) => commitData({ color: e.target.value })}
-                className="h-8 w-12 cursor-pointer rounded border border-border/80 bg-bg/60"
-                aria-label="Color"
-              />
-              <input
-                value={String(data.color ?? '#FF6A00')}
-                onChange={(e) => patchData({ color: e.target.value })}
-                onBlur={() => commit()}
-                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                className="flex-1 rounded-lg border border-border/80 bg-bg/60 px-3 py-2 font-mono text-xs text-text focus:border-purple/50 focus:outline-none"
-              />
+          {isPixel && (
+            <div className="mt-2.5">
+              <FieldLabel>Color (primary)</FieldLabel>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={String(data.color ?? '#FF6A00')}
+                  onChange={(e) => commitData({ color: e.target.value })}
+                  className="h-8 w-12 cursor-pointer rounded border border-border/80 bg-bg/60"
+                  aria-label="Color"
+                />
+                <input
+                  value={String(data.color ?? '#FF6A00')}
+                  onChange={(e) => patchData({ color: e.target.value })}
+                  onBlur={() => commit()}
+                  onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                  className="flex-1 rounded-lg border border-border/80 bg-bg/60 px-3 py-2 font-mono text-xs text-text focus:border-purple/50 focus:outline-none"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {isPixel && effectDef?.uses.color2 && (
             <div className="mt-2.5">

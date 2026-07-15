@@ -65,6 +65,14 @@ interface TimelineProps {
    */
   livePreviewOn?: boolean;
   sendToMaster?: (event: string, payload?: unknown) => boolean;
+  /** Desktop OS-drop hook: registers a placer that drops an audio file on the
+   * track under the cursor (client coords). Returns false if the point isn't
+   * over the timeline, so the caller can fall back. See App's __voxDrop. */
+  registerFileDrop?: (
+    place:
+      | ((bytes: ArrayBuffer, name: string, mime: string, clientX: number, clientY: number) => boolean)
+      | null,
+  ) => void;
 }
 
 /**
@@ -81,6 +89,7 @@ export function Timeline({
   onNotify,
   livePreviewOn = false,
   sendToMaster,
+  registerFileDrop,
 }: TimelineProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -287,7 +296,11 @@ export function Timeline({
             deviceId: track.deviceId,
             clipId: `${track.id}:off`,
             type: track.type,
-            data: { animation: 'off' },
+            // Eyes: revert to the board's DEFAULT eye (empty "eye" is the revert
+            // signal — matches the scheduler's clip-end event); gaze is left
+            // untouched. Pixels: go dark. (eye_set_active is idempotent, so
+            // streaming this every idle frame is a no-op after the first.)
+            data: track.type === 'eyes' ? { eye: '' } : { animation: 'off' },
           });
         }
         prevRelayStatesRef.current = relaysNow;
@@ -803,6 +816,28 @@ export function Timeline({
     },
     [importAudioBytes, addDeviceTracks],
   );
+
+  // Desktop OS-drop placement: the same track-under-cursor logic as onDrop, but
+  // driven by the native drop position the Rust shell forwards (see App's
+  // __voxDrop). Returns false when the point isn't over the canvas so App can
+  // fall back to appending.
+  useEffect(() => {
+    if (!registerFileDrop) return;
+    registerFileDrop((bytes, name, mime, clientX, clientY) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return false;
+      const rect = canvas.getBoundingClientRect();
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        return false;
+      }
+      const dropX = clientX - rect.left - LAYOUT.trackHeaderWidth;
+      const dropY = clientY - rect.top;
+      if (dropX < 0) return false; // dropped on the track headers, not a lane
+      void importAudioBytes(bytes, name, mime, dropX, dropY);
+      return true;
+    });
+    return () => registerFileDrop(null);
+  }, [registerFileDrop, importAudioBytes]);
 
   // --- Duplicate / copy / paste (operate on the whole selection) -----------
   const clipboardRef = useRef<VoxClip[]>([]);

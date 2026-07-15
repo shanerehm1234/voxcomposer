@@ -20,9 +20,20 @@
 // mismatch) so we control the key lookup and can log a miss, making failures
 // diagnosable from the terminal instead of an opaque 500.
 
-use tauri::{WebviewUrl, WebviewWindowBuilder};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+
+use tauri::{DragDropEvent, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 use tiny_http::{Header, Response, Server};
+
+/// Files the user dragged from the OS onto the window, keyed by a one-shot id.
+/// The drag-drop handler stashes the paths here and the web app fetches the
+/// bytes back over /__drop (WebKitGTK swallows real HTML5 file drops, so this
+/// Rust bridge is how a dropped file reaches the editor). See on_drag_drop_event.
+type DropStore = Arc<Mutex<HashMap<u64, PathBuf>>>;
 
 /// Asset keys to try for a given request URL, most-specific first. Tauri's
 /// embedded-asset resolver has varied on whether keys carry a leading slash
@@ -101,7 +112,16 @@ fn json_string(s: &str) -> String {
 }
 
 fn main() {
-    let port = portpicker::pick_unused_port().expect("no free TCP port available");
+    // In dev (`tauri dev`) the window loads the Vite dev server for hot-reload
+    // (see devUrl in tauri.conf.json); the in-process server still runs, on a
+    // FIXED port, so Vite can proxy the native routes (/__save, /__open) to it
+    // (see the proxy in vite.config.ts). In release the window loads this
+    // server directly and the port is picked dynamically to avoid collisions.
+    let port: u16 = if cfg!(debug_assertions) {
+        1421
+    } else {
+        portpicker::pick_unused_port().expect("no free TCP port available")
+    };
 
     tauri::Builder::default()
         // "Open web UI" buttons (Master + remotes) hand URLs to the system
@@ -116,6 +136,9 @@ fn main() {
             // Handle for the asset-server thread so /__save can raise a native
             // save dialog on the correct (UI) thread.
             let handle = app.handle().clone();
+            let dropped: DropStore = Arc::new(Mutex::new(HashMap::new()));
+            let drop_ids = Arc::new(AtomicU64::new(1));
+            let dropped_srv = dropped.clone();
             let server =
                 Server::http(("127.0.0.1", port)).expect("failed to start the local asset server");
             eprintln!("[voxcomposer-desktop] serving the editor on http://localhost:{port}");
@@ -191,6 +214,25 @@ fn main() {
                         continue;
                     }
 
+                    // A file the user dragged onto the window (see
+                    // on_drag_drop_event): the web app fetches its bytes here by
+                    // the one-shot id we handed it. Removed after serving.
+                    if let Some(q) = url.strip_prefix("/__drop?id=") {
+                        let id: u64 = q.parse().unwrap_or(0);
+                        let path = dropped_srv.lock().ok().and_then(|mut m| m.remove(&id));
+                        match path.and_then(|p| std::fs::read(&p).ok()) {
+                            Some(bytes) => {
+                                let _ = request.respond(Response::from_data(bytes));
+                            }
+                            None => {
+                                let _ = request.respond(
+                                    Response::from_string("not found").with_status_code(404),
+                                );
+                            }
+                        }
+                        continue;
+                    }
+
                     let keys = candidate_keys(&url);
 
                     // Resolve the asset first; respond() consumes `request`, so
@@ -219,14 +261,59 @@ fn main() {
                 }
             });
 
-            let app_url = format!("http://localhost:{port}")
+            // Dev: load Vite (hot-reload). Release: load our embedded server.
+            let app_url_str = if cfg!(debug_assertions) {
+                "http://localhost:5173".to_string()
+            } else {
+                format!("http://localhost:{port}")
+            };
+            let app_url = app_url_str
                 .parse()
                 .expect("a localhost URL with a valid port is always parseable");
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(app_url))
+            // Tauri's native drag-drop handler stays ENABLED: disabling it (to
+            // let the web app's HTML5 ondrop fire) exposes WebKitGTK's
+            // widget-level "navigate to the dropped file" behavior, which DOM
+            // preventDefault can't reliably stop (a dropped file would hijack the
+            // window into a full-screen player). Instead we handle the native
+            // drop event below.
+            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(app_url))
                 .title("Vox Composer")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(900.0, 600.0)
                 .build()?;
+
+            // OS file drops: stash each dropped path under a one-shot id and hand
+            // the web app {id,name}; it fetches the bytes back via /__drop and
+            // imports them (see window.__voxDrop in the editor). This is how a
+            // dropped WAV/MP3/.vox reaches the app, since WebKitGTK never gives
+            // the page a real HTML5 file drop.
+            let drop_win = window.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::DragDrop(DragDropEvent::Drop { paths, position }) = event {
+                    let mut items = String::from("[");
+                    for (i, p) in paths.iter().enumerate() {
+                        let id = drop_ids.fetch_add(1, Ordering::Relaxed);
+                        let name = p
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        if let Ok(mut m) = dropped.lock() {
+                            m.insert(id, p.clone());
+                        }
+                        if i > 0 {
+                            items.push(',');
+                        }
+                        items.push_str(&format!("{{\"id\":{},\"name\":{}}}", id, json_string(&name)));
+                    }
+                    items.push(']');
+                    // Physical drop position (webview-relative); the page divides
+                    // by devicePixelRatio to get client coords for hit-testing.
+                    let _ = drop_win.eval(&format!(
+                        "window.__voxDrop&&window.__voxDrop({items},{},{})",
+                        position.x, position.y
+                    ));
+                }
+            });
 
             Ok(())
         })

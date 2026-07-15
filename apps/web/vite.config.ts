@@ -58,5 +58,16 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // In the Tauri dev wrapper the window loads this Vite server, but the
+    // native "Save As" (/__save) and open-in-browser (/__open) routes are
+    // served by the desktop app's in-process Rust server on a fixed dev port
+    // (1421). Proxy them there so File→Save works in `tauri dev` too. Harmless
+    // in a plain browser (nothing listens on 1421 → the app's browser fallback
+    // kicks in).
+    proxy: {
+      '/__save': 'http://127.0.0.1:1421',
+      '/__open': 'http://127.0.0.1:1421',
+      '/__drop': 'http://127.0.0.1:1421',
+    },
   },
 });

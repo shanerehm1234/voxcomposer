@@ -20,6 +20,9 @@ export interface MasterStatus {
   connected: boolean;
   /** Latest `device_status` per device ID, as reported by the Master. */
   devices: Map<string, DeviceStatusPayload>;
+  /** SD file inventory per device (UPPERCASE MAC key) from the Master's last
+   * /status — e.g. an OcularVox's `.eye` basenames for the clip Eye picker. */
+  inventories: Map<string, string[]>;
   /** The Master's own MAC + onboard I/O, when a readable /status was fetched. */
   info: MasterInfo | null;
   /**
@@ -65,6 +68,7 @@ async function masterIsAlive(httpBase: string): Promise<boolean> {
 export function useMasterStatus(): MasterStatus {
   const [connected, setConnected] = useState(false);
   const [devices, setDevices] = useState<Map<string, DeviceStatusPayload>>(new Map());
+  const [inventories, setInventories] = useState<Map<string, string[]>>(new Map());
   const [info, setInfo] = useState<MasterInfo | null>(null);
   const devicesRef = useRef(devices);
   devicesRef.current = devices;
@@ -138,11 +142,13 @@ export function useMasterStatus(): MasterStatus {
               kind?: string;
               channels?: number;
               paired?: boolean;
+              fileList?: string[];
             }[];
           };
           if (!cancelled) {
             if (s.sys?.mac) setInfo({ mac: s.sys.mac, onboard: s.sys.onboard ?? [] });
             const next = new Map<string, DeviceStatusPayload>();
+            const inv = new Map<string, string[]>();
             for (const r of s.remotes ?? []) {
               next.set(r.id, {
                 deviceId: r.id,
@@ -154,8 +160,10 @@ export function useMasterStatus(): MasterStatus {
                 channels: r.channels,
                 paired: r.paired ?? false,
               });
+              if (r.fileList?.length) inv.set(r.id.toUpperCase(), r.fileList);
             }
             setDevices(next);
+            setInventories(inv);
           }
         }
       } catch {
@@ -168,6 +176,7 @@ export function useMasterStatus(): MasterStatus {
       } else {
         setConnected(false);
         setDevices(new Map());
+        setInventories(new Map());
         setInfo(null);
         closeWs();
       }
@@ -191,5 +200,5 @@ export function useMasterStatus(): MasterStatus {
     return true;
   }, []);
 
-  return { connected, devices, info, send };
+  return { connected, devices, inventories, info, send };
 }

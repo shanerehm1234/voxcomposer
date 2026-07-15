@@ -11,12 +11,12 @@ import { ShortcutsOverlay } from './components/ShortcutsOverlay.js';
 import { Toast, type ToastMessage } from './components/Toast.js';
 import { type DemoDevice, isDemoMode, makeDemoState, makeEmptyState } from './demo/demoData.js';
 import { defaultDeviceName, kindToType } from './devices/kind.js';
-import { addBytesToLibrary, importMediaFiles } from './media/library.js';
+import { addBytesToLibrary, getMedia, importMediaFiles, type MediaFile } from './media/library.js';
 import { addClip, addDevice, findClip, newClipId, removeDevice, replaceClip } from './timeline/edits.js';
 import { useHistory } from './timeline/history.js';
 import { Timeline } from './timeline/Timeline.js';
 import { decodeAudioFile } from './audio/analyze.js';
-import { isAcceptedAudioName } from './audio/format.js';
+import { isAcceptedAudio, isAcceptedAudioName } from './audio/format.js';
 import { buildAudioClip } from './audio/import.js';
 import { registerAsset } from './audio/registry.js';
 import { useInstallPrompt } from './pwa/useInstallPrompt.js';
@@ -389,6 +389,25 @@ export function App() {
     [show, commit, showToast],
   );
 
+  // Place a Media-library file onto the timeline. Media and Timeline are
+  // separate full-screen tabs (no drag path between them), so the Media tab's
+  // "Add to timeline" button / double-click routes here, then jumps to the
+  // timeline so the user sees the clip land.
+  const addMediaToTimeline = useCallback(
+    (item: MediaFile) => {
+      const m = getMedia(item.id);
+      if (!m) {
+        showToast(`Couldn't find “${item.filename}” in the library`, 'error');
+        return;
+      }
+      void m.blob.arrayBuffer().then((b) => {
+        void importAudioFromBytes(b, item.filename, m.blob.type);
+        setActiveView('timeline');
+      });
+    },
+    [importAudioFromBytes, showToast],
+  );
+
   // --- Drag a .vox / .zip anywhere to import (window-level = reliable) ------
   // Window listeners avoid React event-bubbling quirks where a drop on the
   // timeline canvas (which handles audio drops) wouldn't reach a parent handler.
@@ -398,13 +417,23 @@ export function App() {
       if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) e.preventDefault();
     };
     const onDrop = (e: DragEvent) => {
+      // A drop on the timeline canvas is handled there (with precise placement)
+      // and already prevented — don't re-import it here.
+      if (e.defaultPrevented) return;
+
       const files = Array.from(e.dataTransfer?.files ?? []);
-      const file = files.find((f) => isShowFile(f.name.toLowerCase()));
-      if (file) {
-        e.preventDefault();
-        const name = file.name;
-        // Read the bytes NOW, while the dropped file reference is still valid.
-        void file
+      const types = Array.from(e.dataTransfer?.types ?? []);
+
+      // ALWAYS stop the webview from navigating to / opening a dropped file —
+      // its default action replaces the whole app with a full-screen media
+      // player. This must happen for audio too, not just .vox/.zip.
+      if (files.length > 0 || types.includes('Files')) e.preventDefault();
+
+      // Read bytes NOW, while the dropped File reference is still valid.
+      const showFile = files.find((f) => isShowFile(f.name.toLowerCase()));
+      if (showFile) {
+        const name = showFile.name;
+        void showFile
           .arrayBuffer()
           .then((b) => handleImportBytes(b, name))
           .catch(() =>
@@ -412,12 +441,23 @@ export function App() {
           );
         return;
       }
-      // Some Linux file managers drop a URI instead of a readable File. Audio
-      // drops are handled by the timeline canvas; if nothing readable arrived,
-      // point the user at the reliable Open button.
-      const types = Array.from(e.dataTransfer?.types ?? []);
+
+      // Audio dropped anywhere but the timeline canvas: add it to an audio track
+      // (same as the Media tab's "Add to timeline"), rather than opening it.
+      const audio = files.find((f) => isAcceptedAudio(f));
+      if (audio) {
+        const { name, type } = audio;
+        void audio
+          .arrayBuffer()
+          .then((b) => importAudioFromBytes(b, name, type))
+          .catch(() =>
+            showToast('Couldn’t read the dropped audio — use Import in the Media tab.', 'error'),
+          );
+        return;
+      }
+
+      // Some Linux file managers hand over a URI instead of a readable File.
       if (files.length === 0 && (types.includes('Files') || types.includes('text/uri-list'))) {
-        e.preventDefault();
         showToast('Drag-drop didn’t provide the file — use the Open button (folder icon).', 'info');
       }
     };
@@ -427,7 +467,58 @@ export function App() {
       window.removeEventListener('dragover', onDragOver);
       window.removeEventListener('drop', onDrop);
     };
-  }, [handleImportBytes, showToast]);
+  }, [handleImportBytes, importAudioFromBytes, showToast]);
+
+  // Timeline registers a position-aware audio placer here (drop lands on the
+  // track under the cursor). Null when the timeline isn't showing.
+  const timelinePlaceRef = useRef<
+    ((bytes: ArrayBuffer, name: string, mime: string, clientX: number, clientY: number) => boolean) | null
+  >(null);
+  const registerTimelineDrop = useCallback((fn: typeof timelinePlaceRef.current) => {
+    timelinePlaceRef.current = fn;
+  }, []);
+
+  // --- Desktop (Tauri) OS file drops ----------------------------------------
+  // WebKitGTK never gives the page a real HTML5 file drop, so the desktop shell
+  // catches the native drop in Rust and calls this with each {id,name} plus the
+  // drop position; we fetch the bytes back over /__drop and import them, placing
+  // audio on the track under the cursor. No-op in a plain browser (OS drops work
+  // natively there).
+  useEffect(() => {
+    interface DropItem {
+      id: number;
+      name: string;
+    }
+    const g = window as unknown as {
+      __voxDrop?: (items: DropItem[], physX?: number, physY?: number) => void;
+    };
+    g.__voxDrop = (items, physX, physY) => {
+      const dpr = window.devicePixelRatio || 1;
+      const clientX = (physX ?? 0) / dpr;
+      const clientY = (physY ?? 0) / dpr;
+      for (const it of items) {
+        void fetch(`/__drop?id=${it.id}`)
+          .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('drop fetch failed'))))
+          .then((bytes) => {
+            const lower = it.name.toLowerCase();
+            if (lower.endsWith('.vox') || lower.endsWith('.zip')) {
+              handleImportBytes(bytes, it.name);
+            } else if (isAcceptedAudioName(it.name)) {
+              // Place on the track under the cursor if the timeline is showing
+              // and the drop landed on it; otherwise append to an audio track.
+              const placed = timelinePlaceRef.current?.(bytes, it.name, '', clientX, clientY);
+              if (!placed) void importAudioFromBytes(bytes, it.name, '');
+            } else {
+              showToast(`Can't import “${it.name}” — drop a WAV/MP3 or .vox`, 'error');
+            }
+          })
+          .catch(() => showToast(`Couldn't read “${it.name}”`, 'error'));
+      }
+    };
+    return () => {
+      delete g.__voxDrop;
+    };
+  }, [handleImportBytes, importAudioFromBytes, showToast]);
 
   // --- Persistence: restore on mount, autosave on change --------------------
   useEffect(() => {
@@ -590,6 +681,7 @@ export function App() {
               onNotify={showToast}
               livePreviewOn={livePreviewOn}
               sendToMaster={masterStatus.send}
+              registerFileDrop={registerTimelineDrop}
             />
           )}
           {activeView === 'devices' && (
@@ -600,7 +692,9 @@ export function App() {
               onRemoveDevice={handleRemoveDevice}
             />
           )}
-          {activeView === 'media' && <MediaView onNotify={showToast} />}
+          {activeView === 'media' && (
+            <MediaView onNotify={showToast} onAddToTimeline={addMediaToTimeline} />
+          )}
           {activeView === 'shows' && (
             <ShowsView
               master={{ connected: masterStatus.connected, host: getMasterConfig().host }}
@@ -620,6 +714,7 @@ export function App() {
             show={show}
             onChange={editClip}
             selectionCount={selectedClipIds.length}
+            deviceInventories={masterStatus.inventories}
           />
         )}
       </div>
