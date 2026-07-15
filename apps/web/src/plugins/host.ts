@@ -1,6 +1,7 @@
 import type { VoxPlugin, VoxPluginAPI } from '@voxcomposer/plugin-sdk';
 import type { VoxShow } from '@voxcomposer/shared';
 import { createPluginAPI, type MasterRelay } from './api.js';
+import { makeMasterRelay } from './masterRelay.js';
 
 /**
  * Runtime host for the loaded plugins: owns the single {@link VoxPluginAPI}
@@ -10,7 +11,10 @@ import { createPluginAPI, type MasterRelay } from './api.js';
  * plugin surface picks it up.
  */
 let liveShow: VoxShow | null = null;
-let relay: MasterRelay | undefined;
+// Default to the Master-backed relay: http:// calls to a Hue bridge / Home
+// Assistant can't go direct from the browser (no CORS), so they proxy through
+// the configured Master. setPluginRelay can replace it (e.g. a socket relay).
+let relay: MasterRelay | undefined = makeMasterRelay();
 const apiCache = new Map<string, VoxPluginAPI>();
 
 const EMPTY_SHOW = { version: '1', name: '', duration: 0, tracks: [], devices: [] } as unknown as VoxShow;

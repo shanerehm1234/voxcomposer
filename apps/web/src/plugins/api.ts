@@ -12,6 +12,12 @@ export interface MasterRelay {
   udp(host: string, port: number, data: Uint8Array): Promise<void>;
   osc(host: string, port: number, address: string, args: OscArg[]): Promise<void>;
   mqtt(broker: string, topic: string, payload: string): Promise<void>;
+  /**
+   * Proxy an HTTP request through the Master (its `POST /relay/http`), for
+   * targets the browser can't reach directly (a Hue bridge / Home Assistant send
+   * no CORS headers). Returns the upstream Response verbatim.
+   */
+  http(url: string, init?: RequestInit): Promise<Response>;
   emit(event: string, payload: unknown): void;
 }
 
@@ -52,7 +58,13 @@ export function createPluginAPI(plugin: VoxPlugin, deps: PluginHostDeps): VoxPlu
     },
     async sendHTTP(url, init) {
       require('network');
-      // HTTP can go direct from the browser when CORS permits.
+      // http:// targets are usually LAN devices with no CORS headers (a Hue
+      // bridge, Home Assistant) — the browser can't reach them, so route through
+      // the Master relay when we have one. https targets (e.g. Hue's cloud
+      // discovery) send CORS and can't use the http-only relay, so fetch direct.
+      if (deps.relay && /^http:\/\//i.test(url)) {
+        return deps.relay.http(url, init);
+      }
       return fetch(url, init);
     },
     getCurrentShow() {

@@ -69,10 +69,20 @@ describe('createPluginAPI', () => {
     const udp = vi.fn().mockResolvedValue(undefined);
     const api = createPluginAPI(fakePlugin(), {
       getShow: emptyShow,
-      relay: { udp, osc: vi.fn(), mqtt: vi.fn(), emit: vi.fn() },
+      relay: { udp, osc: vi.fn(), mqtt: vi.fn(), http: vi.fn(), emit: vi.fn() },
     });
     await api.sendUDP('192.168.1.9', 21324, new Uint8Array([1, 2]));
     expect(udp).toHaveBeenCalledOnce();
+  });
+
+  it('routes an http:// sendHTTP through the Master relay', async () => {
+    const http = vi.fn().mockResolvedValue(new Response('{}'));
+    const api = createPluginAPI(fakePlugin(), {
+      getShow: emptyShow,
+      relay: { udp: vi.fn(), osc: vi.fn(), mqtt: vi.fn(), http, emit: vi.fn() },
+    });
+    await api.sendHTTP('http://10.0.0.5/api/KEY/groups');
+    expect(http).toHaveBeenCalledOnce();
   });
 
   it('reads a device only with the devices permission', () => {

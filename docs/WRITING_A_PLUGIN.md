@@ -180,12 +180,12 @@ Most integrations (HTTP/UDP gear, smart lights, home automation) need only
 
 ## 5. Lifecycle hooks
 
-### `onFrame(timestamp, clip, api)` — the important one
+### `onFrame(timestamp, clip, api)` — the live-preview hook
 
-Called on every preview/playback frame **while a clip on your track is active**.
-The host de-dupes: you get called repeatedly, so make the side effect
-**idempotent** (send the same command again = same result). Read your config out
-of `clip.data`, bail if it's incomplete, and fire:
+Called in **live preview** when a clip on your track **becomes active** — once
+per activation (edge-triggered), so an HTTP side effect isn't hammered at frame
+rate. (This is the live path; unattended Master shows use `compileClip` — see
+below.) Read your config out of `clip.data`, bail if it's incomplete, and fire:
 
 ```tsx
 onFrame(_ts, clip, api) {

@@ -7,6 +7,7 @@ import { copyAsset, getAsset } from '../audio/registry.js';
 import { trackColor } from '../styles/palette.js';
 import { pluginRegistry } from '../plugins/registry.js';
 import { registerBuiltins } from '../plugins/builtins.js';
+import { getPluginApi } from '../plugins/host.js';
 import { saveAudioBlob } from '../storage/db.js';
 import {
   IconLoop,
@@ -122,6 +123,9 @@ export function Timeline({
   const prevRelayStatesRef = useRef<Map<string, ReturnType<typeof resolveActiveClipStates>[number]>>(
     new Map(),
   );
+  // Plugin clips (Hue/HA/…) active in the last frame — so a plugin's onFrame
+  // fires ONCE when its clip becomes active (edge-triggered), not every frame.
+  const prevPluginClipsRef = useRef<Set<string>>(new Set());
   const playingRef = useRef(false);
   const lastTickRef = useRef(0);
   const sizeRef = useRef({ width: 0, height: 0, dpr: 1 });
@@ -166,6 +170,7 @@ export function Timeline({
     if (!livePreviewOn) {
       sendToMaster?.(VOX_EVENTS.previewStop, {}); // remotes fail safe (relays open, pixels dark)
       prevRelayStatesRef.current = new Map();
+      prevPluginClipsRef.current = new Set(); // re-fire plugin cues on next run
     }
     // Only fire on the actual on->off/off->on transition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -310,6 +315,32 @@ export function Timeline({
           });
         }
         prevRelayStatesRef.current = relaysNow;
+
+        // Plugin clips (Hue/HA/HTTP/…) aren't remotes the Master relays — the
+        // Composer fires their onFrame directly. Edge-triggered: once when a
+        // clip becomes active, so an HTTP integration isn't hammered at frame
+        // rate. (Unattended Master shows use the baked action instead.)
+        const pluginNow = new Set<string>();
+        for (const s of states) {
+          const plugin = pluginRegistry.forTrackType(s.type);
+          if (!plugin?.onFrame) continue;
+          pluginNow.add(s.clipId);
+          if (prevPluginClipsRef.current.has(s.clipId)) continue; // already fired
+          const clip: VoxClip = {
+            id: s.clipId,
+            startMs: 0,
+            durationMs: 0,
+            type: s.type,
+            data: s.data as Record<string, unknown>,
+          };
+          try {
+            plugin.onFrame(playheadRef.current, clip, getPluginApi(plugin));
+          } catch (e) {
+            console.warn(`[plugin ${plugin.id}] onFrame failed`, e);
+          }
+        }
+        prevPluginClipsRef.current = pluginNow;
+
         sendToMasterRef.current?.(VOX_EVENTS.previewFrame, {
           timestamp: playheadRef.current,
           states: out,

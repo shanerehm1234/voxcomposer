@@ -137,9 +137,11 @@ export interface VoxPlugin extends VoxPluginManifest {
   onRegister?(api: VoxPluginAPI): void | Promise<void>;
 
   /**
-   * Called for each preview/playback frame while a clip on this plugin's track
-   * is active. This is where the plugin fires its side effects (e.g. an HTTP
-   * call to a WLED node) via the api.
+   * Called in live preview when a clip on this plugin's track becomes active —
+   * ONCE per activation (edge-triggered), not every frame, so an HTTP side
+   * effect isn't hammered at frame rate. This is the live-preview path; for a
+   * scheduled show running unattended on the Master, {@link compileClip} is used
+   * instead (the Master can't run plugin JS). Build both from one helper.
    */
   onFrame?(timestamp: number, clip: VoxClip, api: VoxPluginAPI): void;
 
