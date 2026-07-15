@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { loadFixtureProfile } from '../fixtures/vibrary.js';
 import { paramsFromClipData, PIXEL_EFFECTS } from '../pixel/engine.js';
 import { effectiveAnimation } from '../pixel/wled.js';
+import type { VoxPlugin } from '@voxcomposer/plugin-sdk';
 import { pluginRegistry } from '../plugins/registry.js';
 import { getPluginConfig } from '../plugins/config.js';
 import { getPluginApi } from '../plugins/host.js';
@@ -218,6 +219,7 @@ function ClipFields({
             config: getPluginConfig(plugin.id),
             api: getPluginApi(plugin),
           })}
+          <PluginTestButton plugin={plugin} clip={draft} />
         </>
       )}
 
@@ -970,6 +972,59 @@ function SectionDivider({ children }: { children: React.ReactNode }) {
         {children}
       </span>
       <span className="h-px flex-1 bg-border/70" />
+    </div>
+  );
+}
+
+/**
+ * "Test cue" for a plugin clip — fire the clip's action right now so the user
+ * can confirm it works without playing the whole show. Prefers the baked action
+ * (compileClip) so it reports the device's HTTP status; falls back to onFrame.
+ */
+function PluginTestButton({ plugin, clip }: { plugin: VoxPlugin; clip: VoxClip }) {
+  const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!plugin.compileClip && !plugin.onFrame) return null;
+
+  const fire = async () => {
+    setBusy(true);
+    setStatus('firing…');
+    try {
+      const config = getPluginConfig(plugin.id);
+      const api = getPluginApi(plugin);
+      if (plugin.compileClip) {
+        const action = plugin.compileClip(clip, config);
+        if (!action) {
+          setStatus('nothing to fire yet — finish setting up the cue');
+          setBusy(false);
+          return;
+        }
+        const res = await api.sendHTTP(action.url, {
+          method: action.method,
+          headers: action.headers,
+          body: action.body,
+        });
+        setStatus(res.ok ? 'sent ✓' : `device returned HTTP ${res.status}`);
+      } else {
+        plugin.onFrame!(0, clip, api);
+        setStatus('sent ✓');
+      }
+    } catch {
+      setStatus('couldn’t reach the device — is the Master online?');
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="mt-2.5 flex items-center gap-2.5">
+      <button
+        onClick={fire}
+        disabled={busy}
+        className="rounded-md border border-purple/50 bg-purple/15 px-3 py-1.5 text-[12px] font-medium text-purple-l transition-colors hover:bg-purple/25 disabled:opacity-40"
+      >
+        {busy ? 'Testing…' : 'Test cue'}
+      </button>
+      {status && <span className="text-[11px] text-muted">{status}</span>}
     </div>
   );
 }

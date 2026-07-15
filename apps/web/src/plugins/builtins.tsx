@@ -1,5 +1,5 @@
 import type { VoxClip } from '@voxcomposer/shared';
-import { definePlugin, type VoxPlugin } from '@voxcomposer/plugin-sdk';
+import { definePlugin, type BakedHttpAction, type VoxPlugin } from '@voxcomposer/plugin-sdk';
 import { pluginRegistry } from './registry.js';
 import { huePlugin } from './hue.js';
 import { homeAssistantPlugin } from './homeAssistant.js';
@@ -44,12 +44,15 @@ const genericHttp: VoxPlugin = definePlugin({
     return url ? `${method} ${url.replace(/^https?:\/\//, '')}` : 'HTTP — set URL';
   },
   onFrame(_ts, clip, api) {
-    const url = str(clip, 'url');
-    if (!url) return;
-    const method = str(clip, 'method') === 'POST' ? 'POST' : 'GET';
+    const action = httpActionFor(clip);
+    if (!action) return;
     void api
-      .sendHTTP(url, { method, body: method === 'POST' ? str(clip, 'body') : undefined })
+      .sendHTTP(action.url, { method: action.method, body: action.body })
       .catch((e) => api.log('HTTP request failed', e));
+  },
+  compileClip(clip) {
+    // Bake the same request so a scheduled Master show fires it unattended.
+    return httpActionFor(clip);
   },
   renderInspector(clip, { onChange }) {
     const url = str(clip, 'url');
@@ -119,6 +122,15 @@ export function registerBuiltins(): void {
 }
 
 // --- helpers ---------------------------------------------------------------
+
+/** The HTTP request a Generic HTTP clip describes, or null if it has no URL. */
+function httpActionFor(clip: VoxClip): BakedHttpAction | null {
+  const url = str(clip, 'url');
+  if (!url) return null;
+  const method = str(clip, 'method') === 'POST' ? 'POST' : 'GET';
+  const body = method === 'POST' ? str(clip, 'body') : '';
+  return { kind: 'http', method, url, ...(body ? { body } : {}) };
+}
 
 function str(clip: VoxClip, key: string): string {
   const v = (clip.data as Record<string, unknown>)[key];

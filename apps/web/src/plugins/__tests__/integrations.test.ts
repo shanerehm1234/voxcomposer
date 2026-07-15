@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { VoxClip } from '@voxcomposer/shared';
 import { buildHueAction, hexToHueSat } from '../hue.js';
 import { buildHaAction } from '../homeAssistant.js';
+import { BUILTIN_PLUGINS } from '../builtins.js';
 
 /**
  * The Hue/HA plugins bake their per-clip HTTP call via compileClip → the Master
@@ -84,6 +85,29 @@ describe('buildHaAction', () => {
   it('returns null when unconfigured or no service picked', () => {
     expect(buildHaAction({ domain: 'light', service: 'turn_on', entityId: 'x' }, { baseUrl: '', token: '' })).toBeNull();
     expect(buildHaAction({ domain: '', service: '', entityId: '' }, HA)).toBeNull();
+  });
+});
+
+describe('generic-http compileClip', () => {
+  const http = BUILTIN_PLUGINS.find((p) => p.id === 'com.voxcomposer.generic-http')!;
+  const clip = (data: Record<string, unknown>) =>
+    ({ id: 'c', startMs: 0, durationMs: 100, type: 'http', data }) as unknown as VoxClip;
+
+  it('bakes a GET when only a URL is set', () => {
+    expect(http.compileClip!(clip({ url: 'http://x.local/go' }), {})).toEqual({
+      kind: 'http',
+      method: 'GET',
+      url: 'http://x.local/go',
+    });
+  });
+
+  it('bakes a POST with body', () => {
+    const a = http.compileClip!(clip({ url: 'http://x.local/go', method: 'POST', body: 'hi' }), {});
+    expect(a).toMatchObject({ method: 'POST', body: 'hi' });
+  });
+
+  it('bakes nothing without a URL', () => {
+    expect(http.compileClip!(clip({}), {})).toBeNull();
   });
 });
 
