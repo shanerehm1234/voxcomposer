@@ -14,6 +14,8 @@ export interface SendReport {
   /** Name of the skull currently being audio-synced (status === 'syncing'). */
   syncingName?: string;
   audio?: DeviceAudioResult[];
+  /** True once the uploaded show has been made the Master's active show. */
+  activated?: boolean;
   error?: string;
 }
 
@@ -23,7 +25,15 @@ export interface SendReport {
  * progress state and a success/failure check. Replaces the old fire-and-forget
  * toast so it's clear what was sent and whether it worked.
  */
-export function SendResultModal({ report, onClose }: { report: SendReport; onClose: () => void }) {
+export function SendResultModal({
+  report,
+  onClose,
+  onPlay,
+}: {
+  report: SendReport;
+  onClose: () => void;
+  onPlay?: () => void;
+}) {
   const busy = report.status === 'sending' || report.status === 'syncing';
   const title =
     report.status === 'error'
@@ -58,6 +68,9 @@ export function SendResultModal({ report, onClose }: { report: SendReport; onClo
             )}
           </div>
           {report.error && <div className="mt-1 text-[12px] text-red-400">{report.error}</div>}
+          {report.activated && (
+            <div className="mt-1 text-[12px] text-teal-l">✓ Now the active show on the Master</div>
+          )}
         </div>
 
         {/* Audio sync per skull */}
@@ -86,14 +99,22 @@ export function SendResultModal({ report, onClose }: { report: SendReport; onClo
           ))}
         </div>
 
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
             disabled={busy}
             className="rounded-lg border border-border/70 bg-bg3/40 px-4 py-1.5 text-[13px] font-medium text-text transition-colors hover:bg-bg3/70 disabled:opacity-40"
           >
-            {busy ? 'Working…' : 'Done'}
+            {busy ? 'Working…' : report.status === 'done' ? 'Done' : 'Close'}
           </button>
+          {report.status === 'done' && onPlay && (
+            <button
+              onClick={onPlay}
+              className="rounded-lg border border-purple/50 bg-purple/20 px-4 py-1.5 text-[13px] font-medium text-purple-l transition-colors hover:bg-purple/30"
+            >
+              ▶ Play now
+            </button>
+          )}
         </div>
       </div>
     </div>

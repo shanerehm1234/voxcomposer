@@ -29,7 +29,7 @@ import {
   parseShowBytes,
   readShowPackage,
 } from './vox/voxFile.js';
-import { getMasterConfig, sendShowToMaster } from './voxlink/master.js';
+import { activateMasterShow, getMasterConfig, playOnMaster, sendShowToMaster } from './voxlink/master.js';
 import { neededAudio, syncDeviceAudio } from './audio/sync.js';
 import { SendResultModal, type DeviceAudioResult, type SendReport } from './components/SendResultModal.js';
 import { useMasterStatus } from './voxlink/useMasterStatus.js';
@@ -308,6 +308,9 @@ export function App() {
       setSendReport({ status: 'error', showName: show.name, error: r.error ?? 'Send failed' });
       return;
     }
+    // Make the just-sent show the Master's active one, so Play (and the Master's
+    // own play control) runs THIS show rather than whatever was active before.
+    const activated = r.slug ? await activateMasterShow(r.slug) : false;
     // Auto-sync each online skull's audio as part of the send (no separate step).
     const skulls = sidebarDevices.filter(
       (d) => d.type === 'skull' && d.connection === 'online' && d.ip && neededAudio(show, d.id).length > 0,
@@ -333,6 +336,7 @@ export function App() {
       clips: r.clips,
       durationMs: r.durationMs,
       audio,
+      activated,
     });
   }, [show, sidebarDevices]);
 
@@ -757,7 +761,18 @@ export function App() {
       </div>
       <Toast toast={toast} onDismiss={() => setToast(null)} />
       <ShortcutsOverlay open={showHelp} onClose={() => setShowHelp(false)} />
-      {sendReport && <SendResultModal report={sendReport} onClose={() => setSendReport(null)} />}
+      {sendReport && (
+        <SendResultModal
+          report={sendReport}
+          onClose={() => setSendReport(null)}
+          onPlay={() => {
+            void playOnMaster().then((ok) =>
+              showToast(ok ? 'Playing on the Master' : 'Could not start playback', ok ? 'success' : 'error'),
+            );
+            setSendReport(null);
+          }}
+        />
+      )}
     </div>
   );
 }
