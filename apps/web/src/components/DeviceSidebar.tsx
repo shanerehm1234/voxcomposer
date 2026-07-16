@@ -227,6 +227,7 @@ export function DeviceSidebar({
           discovered={discovered}
           scanning={scanning}
           onRescan={runScan}
+          masterConnected={master.connected}
           onClose={() => setModalOpen(false)}
           onSave={(device) => {
             onAddDevice(device);

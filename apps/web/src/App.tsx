@@ -312,10 +312,20 @@ export function App() {
     // own play control) runs THIS show rather than whatever was active before.
     const activated = r.slug ? await activateMasterShow(r.slug) : false;
     // Auto-sync each online skull's audio as part of the send (no separate step).
-    const skulls = sidebarDevices.filter(
-      (d) => d.type === 'skull' && d.connection === 'online' && d.ip && neededAudio(show, d.id).length > 0,
-    );
+    const needsAudio = sidebarDevices.filter((d) => d.type === 'skull' && neededAudio(show, d.id).length > 0);
+    const skulls = needsAudio.filter((d) => d.connection === 'online' && d.ip);
     const audio: DeviceAudioResult[] = [];
+    // Surface skulls we CAN'T reach rather than silently skipping them — else the
+    // user reads "done", assumes the audio landed, and the show plays silent.
+    for (const d of needsAudio.filter((x) => !skulls.includes(x))) {
+      audio.push({
+        device: d.name,
+        done: 0,
+        failed: 0,
+        total: neededAudio(show, d.id).length,
+        error: 'offline — audio NOT synced',
+      });
+    }
     for (const d of skulls) {
       const base = { status: 'syncing' as const, showName: r.name ?? show.name, clips: r.clips, syncingName: d.name };
       setSendReport(base);
@@ -570,7 +580,7 @@ export function App() {
         if (!cancelled && !localStorage.getItem('vox.welcomed')) {
           localStorage.setItem('vox.welcomed', '1');
           setTimeout(
-            () => showToast('Welcome! Drag a .wav onto the timeline to begin', 'info'),
+            () => showToast('Welcome! Add a device on the left, drag it onto the timeline, then drop audio on its track', 'info'),
             600,
           );
         }

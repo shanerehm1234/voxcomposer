@@ -22,6 +22,9 @@ interface AddDeviceModalProps {
   scanning?: boolean;
   /** Re-run the scan, e.g. if the device hasn't shown up yet. */
   onRescan?: () => void;
+  /** Whether the Vox Master connection is up — scans go through it, so when it's
+   *  down the "no devices found" guidance must say so instead of blaming the remote. */
+  masterConnected?: boolean;
   /** The remote's LAN IP (when the Master reports one) — shows an "open its
    *  web UI" link so hardware settings (pixel count, color order, brightness
    *  limits…) are one tap away. They live on the remote, not here. */
@@ -61,6 +64,7 @@ export function AddDeviceModal({
   discovered = [],
   scanning = false,
   onRescan,
+  masterConnected = true,
   deviceIp,
 }: AddDeviceModalProps) {
   const [id, setId] = useState(initial?.id ?? '');
@@ -186,7 +190,11 @@ export function AddDeviceModal({
             <div className="mt-1.5 max-h-36 space-y-1 overflow-y-auto">
               {pickable.length === 0 && (
                 <p className="rounded-lg border border-dashed border-border/60 px-2.5 py-2 text-[12px] text-muted">
-                  {scanning ? 'Listening for Vox-Link beacons…' : "No new devices seen yet — power it on, then Rescan."}
+                  {!masterConnected
+                    ? 'Not connected to a Vox Master — remotes are discovered through it. Check the host in Settings.'
+                    : scanning
+                      ? 'Listening for Vox-Link beacons…'
+                      : 'No new devices seen yet — power it on, then Rescan.'}
                 </p>
               )}
               {pickable.map((d) => (

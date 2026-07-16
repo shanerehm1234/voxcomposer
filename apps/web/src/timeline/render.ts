@@ -63,6 +63,22 @@ export function drawTimeline(ctx: CanvasRenderingContext2D, s: RenderState): voi
   drawGrid(ctx, viewport, contentWidth, show.tracks.length);
   drawClips(ctx, s);
 
+  // A show with no tracks at all is a blank void — tell a first-time user how
+  // to start (the per-lane hints only exist once a track does).
+  if (show.tracks.length === 0) {
+    const cx = contentWidth / 2;
+    const cy = LAYOUT.rulerHeight + 90;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(175, 169, 236, 0.75)';
+    ctx.font = '600 16px Inter, system-ui, sans-serif';
+    ctx.fillText('Drag a device or plugin from the left onto the timeline', cx, cy);
+    ctx.fillStyle = 'rgba(113, 128, 150, 0.7)';
+    ctx.font = '13px Inter, system-ui, sans-serif';
+    ctx.fillText('Each device gets its own track — then drop audio or double-click to add clips', cx, cy + 26);
+    ctx.textAlign = 'left';
+  }
+
   ctx.restore();
 
   // --- Header column (track labels), drawn over content's left edge. ---
