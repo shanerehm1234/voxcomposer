@@ -96,6 +96,18 @@ export async function uploadDeviceAudio(deviceIp: string, name: string, wav: Arr
   if (!res.ok) throw new Error(`uploading ${name} failed: HTTP ${res.status}`);
 }
 
+/**
+ * Ask the device to re-index its SD card (OcularVox `rescan` command) after an
+ * upload, so newly-pushed files show on the OLED browser without a reboot.
+ * Best-effort — playback + the file list already read the card live.
+ */
+export async function triggerDeviceRescan(deviceIp: string): Promise<void> {
+  await fetch(`http://${deviceIp}/api/cmd`, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'rescan' }),
+  }).catch(() => {});
+}
+
 export interface SyncItem {
   clipId: string;
   source: string; // clip's source filename
@@ -153,5 +165,7 @@ export async function syncDeviceAudio(
     }
     onProgress?.(items);
   }
+  // Re-index the card so the skull's OLED browser picks up the new files.
+  if (items.some((i) => i.status === 'done')) await triggerDeviceRescan(deviceIp);
   return items;
 }
