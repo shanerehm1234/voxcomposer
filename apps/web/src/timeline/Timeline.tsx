@@ -8,6 +8,7 @@ import { trackColor } from '../styles/palette.js';
 import { pluginRegistry } from '../plugins/registry.js';
 import { registerBuiltins } from '../plugins/builtins.js';
 import { getPluginApi } from '../plugins/host.js';
+import { deviceAudioName } from '../audio/sync.js';
 import { saveAudioBlob } from '../storage/db.js';
 import {
   IconLoop,
@@ -126,6 +127,9 @@ export function Timeline({
   // Plugin clips (Hue/HA/…) active in the last frame — so a plugin's onFrame
   // fires ONCE when its clip becomes active (edge-triggered), not every frame.
   const prevPluginClipsRef = useRef<Set<string>>(new Set());
+  // Audio clips active in the last frame — so an OcularVox plays its SD file
+  // ONCE on the clip's rising edge (triggered playback, never streamed).
+  const prevAudioClipsRef = useRef<Set<string>>(new Set());
   const playingRef = useRef(false);
   const lastTickRef = useRef(0);
   const sizeRef = useRef({ width: 0, height: 0, dpr: 1 });
@@ -171,6 +175,7 @@ export function Timeline({
       sendToMaster?.(VOX_EVENTS.previewStop, {}); // remotes fail safe (relays open, pixels dark)
       prevRelayStatesRef.current = new Map();
       prevPluginClipsRef.current = new Set(); // re-fire plugin cues on next run
+      prevAudioClipsRef.current = new Set(); // re-trigger audio on next run
     }
     // Only fire on the actual on->off/off->on transition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -340,6 +345,33 @@ export function Timeline({
           }
         }
         prevPluginClipsRef.current = pluginNow;
+
+        // Audio: edge-triggered SD playback on the skull. Audio isn't a
+        // per-frame streamed state (that would restart it 10x/sec) — on a clip's
+        // rising edge we tell its device to play the on-device WAV from its SD
+        // card, exactly like showtime. It plays to the clip's length locally; we
+        // never stream the samples.
+        const audioNow = new Set<string>();
+        for (const track of draftRef.current.tracks) {
+          if (track.type !== 'audio') continue;
+          for (const clip of track.clips) {
+            const head = playheadRef.current;
+            if (head < clip.startMs || head >= clip.startMs + clip.durationMs) continue;
+            audioNow.add(clip.id);
+            if (prevAudioClipsRef.current.has(clip.id)) continue; // already playing
+            const fn = (clip.data as { filename?: string }).filename;
+            if (fn) {
+              out.push({
+                trackId: track.id,
+                deviceId: track.deviceId,
+                clipId: clip.id,
+                type: 'audio',
+                data: { filename: deviceAudioName(fn) },
+              });
+            }
+          }
+        }
+        prevAudioClipsRef.current = audioNow;
 
         sendToMasterRef.current?.(VOX_EVENTS.previewFrame, {
           timestamp: playheadRef.current,

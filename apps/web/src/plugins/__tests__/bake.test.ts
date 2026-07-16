@@ -30,7 +30,7 @@ function show(): VoxShow {
         id: 'audio-trk',
         type: 'audio',
         label: 'Audio',
-        clips: [{ id: 'a1', startMs: 0, durationMs: 500, type: 'audio', data: { filename: 'growl.wav' } }],
+        clips: [{ id: 'a1', startMs: 0, durationMs: 500, type: 'audio', data: { filename: 'growl.mp3' } }],
       },
     ],
   } as unknown as VoxShow;
@@ -59,6 +59,12 @@ describe('bakeShow', () => {
     const audio = baked.tracks.find((t) => t.type === 'audio')!;
     expect((audio.clips[0]!.data as { baked?: unknown }).baked).toBeUndefined();
     expect(countBaked(show())).toBe(1);
+  });
+
+  it('rewrites audio clip filenames to the on-device WAV name', () => {
+    const baked = bakeShow(show());
+    const audio = baked.tracks.find((t) => t.type === 'audio')!;
+    expect((audio.clips[0]!.data as { filename?: string }).filename).toBe('growl.wav');
   });
 
   it('does not mutate the original show', () => {
