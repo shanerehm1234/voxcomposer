@@ -135,6 +135,38 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  examples/plugins/home-assistant:
+    dependencies:
+      '@voxcomposer/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/plugin-sdk
+      '@voxcomposer/shared':
+        specifier: workspace:*
+        version: link:../../../packages/shared
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.31
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
+  examples/plugins/philips-hue:
+    dependencies:
+      '@voxcomposer/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/plugin-sdk
+      '@voxcomposer/shared':
+        specifier: workspace:*
+        version: link:../../../packages/shared
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.31
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
   packages/plugin-sdk:
     dependencies:
       '@voxcomposer/shared':
