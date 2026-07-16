@@ -6,6 +6,8 @@ export interface DeviceAudioResult {
   error?: string;
 }
 
+import type { SyncItem } from '../audio/sync.js';
+
 export interface SendReport {
   status: 'sending' | 'syncing' | 'done' | 'error';
   showName: string;
@@ -13,6 +15,8 @@ export interface SendReport {
   durationMs?: number;
   /** Name of the skull currently being audio-synced (status === 'syncing'). */
   syncingName?: string;
+  /** Live per-file progress for the skull currently syncing. */
+  syncItems?: SyncItem[];
   audio?: DeviceAudioResult[];
   /** True once the uploaded show has been made the Master's active show. */
   activated?: boolean;
@@ -80,7 +84,21 @@ export function SendResultModal({
           </div>
           {report.status === 'sending' && <Line muted>Uploading show…</Line>}
           {report.status === 'syncing' && (
-            <Line muted>Syncing audio to {report.syncingName ?? 'skull'}…</Line>
+            <>
+              <Line muted>Syncing audio to {report.syncingName ?? 'skull'}…</Line>
+              {report.syncItems && report.syncItems.length > 0 && (
+                <>
+                  <SyncBar items={report.syncItems} />
+                  <div className="mt-1 flex flex-col gap-0.5">
+                    {report.syncItems.map((i) => (
+                      <span key={i.clipId} className="font-mono text-[10px] text-muted">
+                        {i.target} — {i.status}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
           )}
           {(report.audio ?? []).length === 0 && report.status === 'done' && (
             <Line muted>No audio to sync (or no skulls online).</Line>
@@ -116,6 +134,34 @@ export function SendResultModal({
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SyncBar({ items }: { items: SyncItem[] }) {
+  const W: Record<SyncItem['status'], number> = {
+    pending: 0,
+    transcoding: 0.35,
+    uploading: 0.7,
+    done: 1,
+    error: 1,
+  };
+  const pct = Math.round((items.reduce((s, i) => s + W[i.status], 0) / Math.max(1, items.length)) * 100);
+  const done = items.filter((i) => i.status === 'done').length;
+  return (
+    <div className="mt-1.5">
+      <div className="mb-0.5 flex justify-between text-[10px] text-muted">
+        <span>transcode → upload</span>
+        <span className="font-mono tabular-nums">
+          {done}/{items.length}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg3/60">
+        <div
+          className="h-full rounded-full bg-purple-l transition-[width] duration-300"
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );

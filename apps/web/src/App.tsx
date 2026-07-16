@@ -317,9 +317,12 @@ export function App() {
     );
     const audio: DeviceAudioResult[] = [];
     for (const d of skulls) {
-      setSendReport({ status: 'syncing', showName: r.name ?? show.name, clips: r.clips, syncingName: d.name });
+      const base = { status: 'syncing' as const, showName: r.name ?? show.name, clips: r.clips, syncingName: d.name };
+      setSendReport(base);
       try {
-        const items = await syncDeviceAudio(show, d.id, d.ip!);
+        const items = await syncDeviceAudio(show, d.id, d.ip!, (its) =>
+          setSendReport({ ...base, syncItems: [...its] }),
+        );
         audio.push({
           device: d.name,
           done: items.filter((i) => i.status === 'done').length,
@@ -766,6 +769,9 @@ export function App() {
           report={sendReport}
           onClose={() => setSendReport(null)}
           onPlay={() => {
+            // Live preview drives the same devices — turn it off so it can't
+            // fight the Master's playback (the "some cues drop" gotcha).
+            if (livePreviewOn) setLivePreviewOn(false);
             void playOnMaster().then((ok) =>
               showToast(ok ? 'Playing on the Master' : 'Could not start playback', ok ? 'success' : 'error'),
             );
