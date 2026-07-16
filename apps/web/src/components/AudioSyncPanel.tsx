@@ -48,6 +48,45 @@ export function AudioSyncPanel({
   );
 }
 
+/** A determinate progress bar across the whole sync — each file counts its
+ *  phase (transcode → upload → done) so the bar moves smoothly, not in jumps. */
+function SyncProgress({ items }: { items: SyncItem[] }) {
+  const WEIGHT: Record<SyncItem['status'], number> = {
+    pending: 0,
+    transcoding: 0.35,
+    uploading: 0.7,
+    done: 1,
+    error: 1,
+  };
+  const total = items.length;
+  const progress = items.reduce((sum, i) => sum + WEIGHT[i.status], 0) / Math.max(1, total);
+  const done = items.filter((i) => i.status === 'done').length;
+  const failed = items.filter((i) => i.status === 'error').length;
+  const complete = done + failed === total;
+  const pct = Math.round(progress * 100);
+  return (
+    <div>
+      <div className="mb-0.5 flex justify-between text-[10px] text-muted">
+        <span>
+          {complete ? (failed ? `${done} synced, ${failed} failed` : 'Synced ✓') : 'Syncing…'}
+        </span>
+        <span className="font-mono tabular-nums">
+          {done}/{total}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg3/60">
+        <div
+          className="h-full rounded-full transition-[width] duration-300"
+          style={{
+            width: `${pct}%`,
+            backgroundColor: failed ? '#E0794B' : '#7C6DF2',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function DeviceRow({
   show,
   dev,
@@ -119,13 +158,16 @@ function DeviceRow({
       {offline && <p className="mt-1 text-[11px] text-muted">Device offline — connect it to sync.</p>}
       {status && <p className="mt-1 text-[11px] text-muted">{status}</p>}
       {items.length > 0 && (
-        <div className="mt-2 flex flex-col gap-0.5">
-          {items.map((i) => (
-            <span key={i.clipId} className="font-mono text-[10px] text-muted">
-              {i.target} — {i.status}
-              {i.error ? ` (${i.error})` : ''}
-            </span>
-          ))}
+        <div className="mt-2 flex flex-col gap-1">
+          <SyncProgress items={items} />
+          <div className="mt-1 flex flex-col gap-0.5">
+            {items.map((i) => (
+              <span key={i.clipId} className="font-mono text-[10px] text-muted">
+                {i.target} — {i.status}
+                {i.error ? ` (${i.error})` : ''}
+              </span>
+            ))}
+          </div>
         </div>
       )}
     </div>
