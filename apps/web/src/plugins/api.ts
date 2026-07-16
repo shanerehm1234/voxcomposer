@@ -3,10 +3,10 @@ import type { OscArg, PluginPermission, VoxPlugin, VoxPluginAPI } from '@voxcomp
 import { getPluginConfig, setPluginConfig } from './config.js';
 
 /**
- * Transport used to relay a plugin's network requests to the Vox Master over
- * the local Socket.io connection. The browser cannot open raw sockets, so UDP /
- * OSC / MQTT all go through here. Wired to the real socket later; until then a
- * plugin gets a clear "Master not connected" rejection.
+ * Transport used to relay a plugin's network requests through the Vox Master.
+ * The browser cannot open raw sockets or reach no-CORS LAN gear, so UDP / OSC /
+ * MQTT / HTTP all go through the Master's `/relay/*` endpoints. When no Master
+ * is configured, network methods reject with a clear "Master not connected".
  */
 export interface MasterRelay {
   udp(host: string, port: number, data: Uint8Array): Promise<void>;

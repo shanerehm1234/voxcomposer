@@ -5,6 +5,7 @@ import { registerBuiltins } from '../plugins/builtins.js';
 import { pluginRegistry } from '../plugins/registry.js';
 import { getPluginConfig, setPluginConfig, subscribePluginConfig } from '../plugins/config.js';
 import { getPluginApi } from '../plugins/host.js';
+import { installPluginFromUrl, isExternalPlugin, uninstallPlugin } from '../plugins/loader.js';
 import { masterWsUrl, testMasterConnection } from '../voxlink/client.js';
 import { getMasterConfig, setMasterConfig } from '../voxlink/master.js';
 import { IconCheck, IconChip, IconRefresh } from './icons.js';
@@ -151,22 +152,8 @@ export function SettingsView({ master, onReset }: SettingsViewProps) {
             </Row>
           </Section>
 
-          <Section title="Plugins" desc="Extend Vox Composer with custom track types and integrations.">
-            <div className="space-y-1.5">
-              {pluginRegistry.list().map((p) => (
-                <PluginRow key={p.id} plugin={p} />
-              ))}
-            </div>
-            <div className="mt-3 flex items-center gap-2">
-              <input
-                placeholder="https://…/my-plugin.js"
-                className="flex-1 rounded-lg border border-border/70 bg-bg/50 px-3 py-1.5 text-[13px] text-text placeholder:text-muted focus:border-purple/50 focus:outline-none"
-              />
-              <button className="rounded-lg border border-border bg-bg3/40 px-3 py-1.5 text-[13px] text-muted hover:text-text">
-                Install by URL
-              </button>
-            </div>
-          </Section>
+          <PluginsSection />
+
 
           <Section title="Developer" desc="Advanced tools for power users.">
             <Row label="Developer mode" desc="Raw .vox JSON editor, WebSocket debug, plugin console">
@@ -262,18 +249,92 @@ function Row({
 }
 
 /**
+ * The Plugins panel: the registered plugins (built-in + externally installed)
+ * and an "install by URL" box. Installing imports the plugin bundle at runtime
+ * (see plugins/loader.ts); the `rev` counter re-reads the registry after an
+ * install/uninstall so the list reflects the change immediately.
+ */
+function PluginsSection() {
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [, setRev] = useState(0);
+
+  const install = async () => {
+    if (busy || !url.trim()) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const p = await installPluginFromUrl(url);
+      setMsg({ ok: true, text: `Installed ${p.name} v${p.version}.` });
+      setUrl('');
+      setRev((n) => n + 1);
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = (id: string) => {
+    uninstallPlugin(id);
+    setMsg(null);
+    setRev((n) => n + 1);
+  };
+
+  return (
+    <Section title="Plugins" desc="Extend Vox Composer with custom track types and integrations.">
+      <div className="space-y-1.5">
+        {pluginRegistry.list().map((p) => (
+          <PluginRow
+            key={p.id}
+            plugin={p}
+            onUninstall={isExternalPlugin(p.id) ? () => remove(p.id) : undefined}
+          />
+        ))}
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void install()}
+          placeholder="https://…/my-plugin.js"
+          spellCheck={false}
+          className="flex-1 rounded-lg border border-border/70 bg-bg/50 px-3 py-1.5 text-[13px] text-text placeholder:text-muted focus:border-purple/50 focus:outline-none"
+        />
+        <button
+          onClick={() => void install()}
+          disabled={busy || !url.trim()}
+          className="rounded-lg border border-border bg-bg3/40 px-3 py-1.5 text-[13px] text-muted transition-colors hover:text-text disabled:opacity-40"
+        >
+          {busy ? 'Installing…' : 'Install by URL'}
+        </button>
+      </div>
+      {msg && (
+        <p className={`mt-2 text-[12px] ${msg.ok ? 'text-teal-l' : 'text-red-400'}`}>{msg.text}</p>
+      )}
+      <p className="mt-2 text-[11px] text-muted">
+        Point to a plugin’s built bundle (its repo’s <span className="font-mono">dist</span> .js).
+        Plugins run trusted, in-process — only install ones you trust.
+      </p>
+    </Section>
+  );
+}
+
+/**
  * One plugin in the list. If the plugin ships a setup UI (`renderSetup`) it gets
  * a Set up / Configured button that expands the plugin's own pairing/token panel
  * inline, and a "Needs setup" badge driven by `isConfigured`. Config changes are
  * observed so the badge + button flip the moment the plugin saves.
  */
-function PluginRow({ plugin }: { plugin: VoxPlugin }) {
+function PluginRow({ plugin, onUninstall }: { plugin: VoxPlugin; onUninstall?: () => void }) {
   const [open, setOpen] = useState(false);
   const [config, setCfg] = useState(() => getPluginConfig(plugin.id));
   useEffect(() => subscribePluginConfig(plugin.id, () => setCfg({ ...getPluginConfig(plugin.id) })), [plugin.id]);
 
   const hasSetup = !!plugin.renderSetup;
   const configured = plugin.isConfigured ? plugin.isConfigured(config) : true;
+  const external = !!onUninstall;
 
   return (
     <div className="rounded-lg border border-border/60 bg-bg/30">
@@ -311,11 +372,25 @@ function PluginRow({ plugin }: { plugin: VoxPlugin }) {
           >
             {open ? 'Close' : configured ? 'Configured' : 'Set up'}
           </button>
+        ) : external ? (
+          <span className="flex items-center gap-1 rounded-md bg-purple/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-purple-l ring-1 ring-inset ring-purple/25">
+            <span className="h-1.5 w-1.5 rounded-full bg-purple-l" />
+            Installed
+          </span>
         ) : (
           <span className="flex items-center gap-1 rounded-md bg-teal/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-teal-l ring-1 ring-inset ring-teal/25">
             <span className="h-1.5 w-1.5 rounded-full bg-teal" />
             Built-in
           </span>
+        )}
+        {external && (
+          <button
+            onClick={onUninstall}
+            title="Uninstall this plugin"
+            className="rounded-md border border-border/70 bg-bg/50 px-2 py-1 text-[12px] text-muted transition-colors hover:border-red-400/50 hover:text-red-400"
+          >
+            Uninstall
+          </button>
         )}
       </div>
       {open && hasSetup && (

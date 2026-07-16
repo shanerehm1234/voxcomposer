@@ -12,6 +12,22 @@
       content="Design and play synchronized animatronic shows for haunted attractions."
     />
     <title>Vox Composer</title>
+    <!--
+      Import map for externally-installed plugins. The app's own bundle never
+      uses bare specifiers (Vite rewrites them), so this only affects plugin
+      bundles loaded at runtime: it lets them leave react / react/jsx-runtime /
+      the plugin SDK as externals and share the host's single copy. The targets
+      are static shim modules in public/ that re-export window.__VOX_HOST__.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "./vox-host-react.js",
+          "react/jsx-runtime": "./vox-host-jsx-runtime.js",
+          "@voxcomposer/plugin-sdk": "./vox-host-sdk.js"
+        }
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

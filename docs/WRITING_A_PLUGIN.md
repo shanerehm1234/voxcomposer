@@ -342,23 +342,66 @@ app: add the device, drop a clip, fill in the inspector, hit play, and watch
 
 ---
 
-## 9. Publish it
+## 9. Build a loadable bundle
+
+Vox Composer installs a plugin by **importing a single ES module at runtime**
+whose **default export** is your plugin object. So ship one built `.js` file.
+
+**The one rule that matters:** don't bundle your own copy of React or the SDK —
+leave them as *externals*. The host shares its own React, `react/jsx-runtime`,
+and `@voxcomposer/plugin-sdk` with your plugin through an import map (see
+`apps/web/public/vox-host-*.js`). If you bundle your own React instead, your
+`renderSetup`/`renderInspector` hooks run on a second React copy and throw
+"invalid hook call".
+
+A minimal [Vite](https://vitejs.dev) library build does exactly this:
+
+```ts
+// vite.config.ts
+import { defineConfig } from 'vite';
+export default defineConfig({
+  build: {
+    lib: { entry: 'src/index.tsx', formats: ['es'], fileName: 'plugin' },
+    rollupOptions: {
+      // Keep these OUT of your bundle — the host provides them.
+      external: ['react', 'react/jsx-runtime', '@voxcomposer/plugin-sdk'],
+    },
+  },
+});
+```
+
+```jsonc
+// tsconfig.json — automatic JSX so you never import React by hand
+{ "compilerOptions": { "jsx": "react-jsx", "module": "ESNext", "moduleResolution": "Bundler" } }
+```
+
+`npm run build` (i.e. `vite build`) emits `dist/plugin.js` — that's the file you
+publish. It's tiny, because React and the SDK aren't in it.
+
+> No React in your plugin? (a pure `onFrame`/`compileClip` integration with no
+> `renderInspector`) — then a fully self-contained bundle works too; the import
+> map simply goes unused.
+
+## 10. Publish it
 
 Plugins live in their own git repo so anyone can install them:
 
-1. Put the package (the three files from §2) in a new repo. Name it
-   **`vox-plugin-<slug>`** (e.g. `vox-plugin-hue`) and add the GitHub topic
-   **`vox-plugin`** so the in-app browser and other authors can find it.
-2. Tag a release (`v0.1.0`).
-3. Users install by pointing Vox Composer's plugin loader at your repo/bundle
-   (Settings → Plugins), approve the permissions prompt, and it registers.
+1. Put the package in a new repo named **`vox-plugin-<slug>`** (e.g.
+   `vox-plugin-hue`) and add the GitHub topic **`vox-plugin`** so the in-app
+   browser and other authors can find it.
+2. Build (§9) and host the resulting `dist/plugin.js` at a stable URL — a
+   GitHub **release asset**, a `gh-pages` branch, or any static/CDN host. (A raw
+   `main`-branch URL works but isn't versioned.)
+3. Users install by pasting that `.js` URL into **Settings → Plugins → Install by
+   URL**. It imports, validates the manifest, registers, and is remembered
+   across launches; **Uninstall** removes it.
 
 Use the [plugin submission template](../.github/ISSUE_TEMPLATE/plugin_submission.md)
 if you want it listed in the community directory.
 
 ---
 
-## 10. Checklist for AI authors
+## 11. Checklist for AI authors
 
 If you're an assistant generating a plugin from a device's API docs, produce
 **exactly** this and nothing more:
