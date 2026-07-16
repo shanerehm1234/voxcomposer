@@ -82,6 +82,22 @@ describe('buildHaAction', () => {
     expect(a?.url).toBe('http://ha.local:8123/api/services/script/run_fog');
   });
 
+  it('merges optional extra JSON params (e.g. camera.snapshot filename)', () => {
+    const a = buildHaAction(
+      { domain: 'camera', service: 'snapshot', entityId: 'camera.porch', dataJson: '{"filename":"/config/www/p.jpg"}' },
+      HA,
+    );
+    expect(JSON.parse(a!.body!)).toEqual({ entity_id: 'camera.porch', filename: '/config/www/p.jpg' });
+  });
+
+  it('ignores invalid extra JSON rather than failing', () => {
+    const a = buildHaAction(
+      { domain: 'light', service: 'turn_on', entityId: 'light.x', dataJson: 'not json' },
+      HA,
+    );
+    expect(JSON.parse(a!.body!)).toEqual({ entity_id: 'light.x' });
+  });
+
   it('returns null when unconfigured or no service picked', () => {
     expect(buildHaAction({ domain: 'light', service: 'turn_on', entityId: 'x' }, { baseUrl: '', token: '' })).toBeNull();
     expect(buildHaAction({ domain: '', service: '', entityId: '' }, HA)).toBeNull();

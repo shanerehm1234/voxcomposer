@@ -43,6 +43,7 @@ interface HaClipData {
   service: string; // e.g. "turn_on"
   entityId: string; // e.g. "light.porch"
   entityName?: string; // cached for the summary
+  dataJson?: string; // optional extra service params, e.g. {"filename":"/config/www/x.jpg"}
 }
 
 function read(clip: VoxClip): HaClipData {
@@ -52,7 +53,19 @@ function read(clip: VoxClip): HaClipData {
     service: d.service ?? '',
     entityId: d.entityId ?? '',
     entityName: d.entityName,
+    dataJson: d.dataJson,
   };
+}
+
+/** Parse the optional extra-params JSON; returns {} if empty/invalid. */
+function parseExtra(dataJson?: string): Record<string, unknown> {
+  if (!dataJson || !dataJson.trim()) return {};
+  try {
+    const v = JSON.parse(dataJson);
+    return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
 }
 
 // --- the pure action builder (unit-tested) -----------------------------------
@@ -60,7 +73,10 @@ function read(clip: VoxClip): HaClipData {
 /** Build the HA REST call for a clip, or null if incomplete. */
 export function buildHaAction(d: HaClipData, c: HaConfig): BakedHttpAction | null {
   if (!c.baseUrl || !c.token || !d.domain || !d.service) return null;
-  const body = d.entityId ? { entity_id: d.entityId } : {};
+  const body = {
+    ...(d.entityId ? { entity_id: d.entityId } : {}),
+    ...parseExtra(d.dataJson), // extra params (e.g. camera.snapshot filename) win
+  };
   return {
     kind: 'http',
     method: 'POST',
@@ -241,11 +257,26 @@ function HaInspector({
     };
   }, [c.baseUrl, c.token, api]);
 
-  // Only offer entities in the selected service's domain (plus "no target").
-  const entityChoices = useMemo(
-    () => (d.domain ? entities.filter((e) => e.domain === d.domain) : entities),
-    [entities, d.domain],
-  );
+  const [filter, setFilter] = useState('');
+
+  // The entity you're targeting drives everything: filter the (possibly huge)
+  // entity list by a search box, then offer only the services that make sense
+  // for that entity's domain (plus the universal homeassistant.* ones).
+  const picked = entities.find((e) => e.entityId === d.entityId);
+  const entityChoices = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    const list = q
+      ? entities.filter((e) => e.name.toLowerCase().includes(q) || e.entityId.toLowerCase().includes(q))
+      : entities;
+    return list.slice(0, 200); // keep the dropdown sane on big installs
+  }, [entities, filter]);
+
+  const serviceChoices = useMemo(() => {
+    if (!picked) return services;
+    return services.filter(
+      (s) => s.startsWith(`${picked.domain}.`) || s.startsWith('homeassistant.'),
+    );
+  }, [services, picked]);
 
   if (!isConfigured(config)) {
     return (
@@ -260,7 +291,38 @@ function HaInspector({
       {loadState === 'loading' && <Muted>Loading your services & entities…</Muted>}
       {loadState === 'err' && <Muted>Couldn’t reach Home Assistant — is the Master online?</Muted>}
 
-      <Field label="Action (service)">
+      <Field label={`Entity${entities.length ? ` (${entities.length})` : ''}`}>
+        <input
+          style={input}
+          value={filter}
+          placeholder="search… e.g. porch, lock, front door"
+          onChange={(e) => setFilter(e.target.value)}
+        />
+        <select
+          style={{ ...input, marginTop: 6 }}
+          value={d.entityId}
+          onChange={(e) => {
+            const ent = entities.find((x) => x.entityId === e.target.value);
+            // Reset the action when the domain changes so you can't keep a
+            // stale, invalid service (a big source of HA 400/500 errors).
+            const domainChanged = ent && d.domain && ent.domain !== d.domain;
+            onChange({
+              entityId: e.target.value,
+              entityName: ent?.name,
+              ...(domainChanged ? { domain: '', service: '' } : {}),
+            });
+          }}
+        >
+          <option value="">— pick an entity —</option>
+          {entityChoices.map((ent) => (
+            <option key={ent.entityId} value={ent.entityId}>
+              {ent.name} — {ent.entityId}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label={picked ? `Action for ${picked.name}` : 'Action (pick an entity first)'}>
         <select
           style={input}
           value={d.domain && d.service ? `${d.domain}.${d.service}` : ''}
@@ -270,7 +332,7 @@ function HaInspector({
           }}
         >
           <option value="">— pick an action —</option>
-          {services.map((s) => (
+          {serviceChoices.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
@@ -278,22 +340,16 @@ function HaInspector({
         </select>
       </Field>
 
-      <Field label="Target entity (optional)">
-        <select
+      <Field label="Extra data (optional JSON)">
+        <input
           style={input}
-          value={d.entityId}
-          onChange={(e) => {
-            const ent = entityChoices.find((x) => x.entityId === e.target.value);
-            onChange({ entityId: e.target.value, entityName: ent?.name });
-          }}
-        >
-          <option value="">— none —</option>
-          {entityChoices.map((ent) => (
-            <option key={ent.entityId} value={ent.entityId}>
-              {ent.name} ({ent.entityId})
-            </option>
-          ))}
-        </select>
+          value={d.dataJson ?? ''}
+          placeholder='e.g. {"brightness_pct": 60} or {"filename": "/config/www/snap.jpg"}'
+          onChange={(e) => onChange({ dataJson: e.target.value })}
+        />
+        {d.dataJson && d.dataJson.trim() && Object.keys(parseExtra(d.dataJson)).length === 0 && (
+          <span style={{ fontSize: 11, color: '#E0794B' }}>not valid JSON — will be ignored</span>
+        )}
       </Field>
     </div>
   );
