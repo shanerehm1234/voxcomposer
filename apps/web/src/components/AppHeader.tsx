@@ -14,6 +14,9 @@ import {
 interface AppHeaderProps {
   remotesOnline: number;
   activeView: string;
+  /** The current show's name, shown + editable in the header. */
+  showName: string;
+  onRenameShow: (name: string) => void;
   onSelectView: (view: string) => void;
   onNewShow: () => void;
   onOpenShow: () => void;
@@ -39,6 +42,8 @@ const NAV = [
 export function AppHeader({
   remotesOnline,
   activeView,
+  showName,
+  onRenameShow,
   onSelectView,
   onNewShow,
   onOpenShow,
@@ -92,7 +97,24 @@ export function AppHeader({
         })}
       </nav>
 
-      <div className="ml-auto flex items-center gap-2.5">
+      {/* Editable show name — the show's identity everywhere (the .vox name, the
+          Master's stored slug). Click to rename; commits on blur/Enter. */}
+      <div className="ml-4 flex min-w-0 flex-1 items-center gap-2">
+        <span className="hidden shrink-0 text-[11px] uppercase tracking-wider text-muted/70 lg:inline">
+          Show
+        </span>
+        <input
+          value={showName}
+          onChange={(e) => onRenameShow(e.target.value)}
+          onFocus={(e) => e.target.select()}
+          spellCheck={false}
+          aria-label="Show name"
+          placeholder="Untitled show"
+          className="min-w-0 max-w-[280px] rounded-md border border-transparent bg-transparent px-2 py-1 text-[14px] font-medium text-text transition-colors hover:border-border/60 focus:border-purple/50 focus:bg-bg/50 focus:outline-none"
+        />
+      </div>
+
+      <div className="flex items-center gap-2.5">
         {onInstall && (
           <button
             onClick={onInstall}

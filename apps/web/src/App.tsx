@@ -30,6 +30,8 @@ import {
   readShowPackage,
 } from './vox/voxFile.js';
 import { getMasterConfig, sendShowToMaster } from './voxlink/master.js';
+import { neededAudio, syncDeviceAudio } from './audio/sync.js';
+import { SendResultModal, type DeviceAudioResult, type SendReport } from './components/SendResultModal.js';
 import { useMasterStatus } from './voxlink/useMasterStatus.js';
 
 // Scheduling deliberately has no view here: the schedule lives on the Vox
@@ -155,6 +157,7 @@ export function App() {
 
   // --- Keyboard help overlay ('?') -----------------------------------------
   const [showHelp, setShowHelp] = useState(false);
+  const [sendReport, setSendReport] = useState<SendReport | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -299,14 +302,39 @@ export function App() {
   }, [show, showToast]);
 
   const handleSendToMaster = useCallback(async () => {
-    showToast('Sending show to the Vox Master…', 'info');
+    setSendReport({ status: 'sending', showName: show.name });
     const r = await sendShowToMaster(show);
-    if (r.ok) {
-      showToast(`Sent “${r.name ?? show.name}” to the Master · ${r.clips ?? '?'} clips`, 'success');
-    } else {
-      showToast(r.error ?? 'Send failed', 'error');
+    if (!r.ok) {
+      setSendReport({ status: 'error', showName: show.name, error: r.error ?? 'Send failed' });
+      return;
     }
-  }, [show, showToast]);
+    // Auto-sync each online skull's audio as part of the send (no separate step).
+    const skulls = sidebarDevices.filter(
+      (d) => d.type === 'skull' && d.connection === 'online' && d.ip && neededAudio(show, d.id).length > 0,
+    );
+    const audio: DeviceAudioResult[] = [];
+    for (const d of skulls) {
+      setSendReport({ status: 'syncing', showName: r.name ?? show.name, clips: r.clips, syncingName: d.name });
+      try {
+        const items = await syncDeviceAudio(show, d.id, d.ip!);
+        audio.push({
+          device: d.name,
+          done: items.filter((i) => i.status === 'done').length,
+          failed: items.filter((i) => i.status === 'error').length,
+          total: items.length,
+        });
+      } catch {
+        audio.push({ device: d.name, done: 0, failed: 0, total: 0, error: 'unreachable' });
+      }
+    }
+    setSendReport({
+      status: 'done',
+      showName: r.name ?? show.name,
+      clips: r.clips,
+      durationMs: r.durationMs,
+      audio,
+    });
+  }, [show, sidebarDevices]);
 
   // Import a show from already-read bytes (a .vox JSON or a .zip package). Bytes
   // are read synchronously at the drop/pick site — re-reading a dropped file
@@ -612,6 +640,8 @@ export function App() {
       <AppHeader
         remotesOnline={remotesOnline}
         activeView={activeView}
+        showName={show.name}
+        onRenameShow={(name) => set({ ...show, name })}
         onSelectView={setActiveView}
         onNewShow={handleNewShow}
         onOpenShow={() => fileInputRef.current?.click()}
@@ -727,6 +757,7 @@ export function App() {
       </div>
       <Toast toast={toast} onDismiss={() => setToast(null)} />
       <ShortcutsOverlay open={showHelp} onClose={() => setShowHelp(false)} />
+      {sendReport && <SendResultModal report={sendReport} onClose={() => setSendReport(null)} />}
     </div>
   );
 }
