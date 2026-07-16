@@ -27,7 +27,11 @@ export function bakeShow(show: VoxShow): VoxShow {
           clips: track.clips.map((clip) => {
             const fn = (clip.data as { filename?: string }).filename;
             if (!fn) return clip;
-            return { ...clip, data: { ...clip.data, filename: deviceAudioName(fn) } };
+            // Strip Composer-only import metadata (sourceHash/sourceFormat) that
+            // no device reads — it bloated the Vox-Link command frame past its
+            // size cap, so the Master dropped audio commands entirely.
+            const { sourceHash: _h, sourceFormat: _f, ...rest } = clip.data as Record<string, unknown>;
+            return { ...clip, data: { ...rest, filename: deviceAudioName(fn) } };
           }),
         };
       }
