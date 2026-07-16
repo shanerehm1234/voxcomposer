@@ -4,10 +4,9 @@ import {
   deleteMasterShow,
   listMasterShows,
   playOnMaster,
-  playPlaylistOnMaster,
   type LibraryShow,
 } from '../voxlink/master.js';
-import { IconCheck, IconLoop, IconPlay, IconRefresh, IconSchedule } from './icons.js';
+import { IconCheck, IconPlay, IconRefresh, IconSchedule } from './icons.js';
 
 interface ShowsViewProps {
   master: { connected: boolean; host: string };
@@ -21,29 +20,14 @@ function fmtDuration(ms: number): string {
 
 /**
  * Browse the show library stored on the connected Vox Master: which .vox shows
- * are on the hub, which one is active, and activate / play / delete them
- * without walking over to the touchscreen. Read-through of the Master's
- * /shows + /activate + /show endpoints.
+ * are on the hub, which one is active, and activate / play / delete them to test
+ * a show on the hardware right after sending it. Playlists + scheduling live on
+ * the Master (its web UI / touchscreen) — the Composer just designs + sends.
  */
 export function ShowsView({ master, onNotify }: ShowsViewProps) {
   const [shows, setShows] = useState<LibraryShow[]>([]);
   const [loading, setLoading] = useState(false);
   const [busySlug, setBusySlug] = useState<string | null>(null);
-  // Ordered playlist selection (order = play order). An array, not a Set, so
-  // the sequence the user clicks in is the sequence that plays.
-  const [queue, setQueue] = useState<string[]>([]);
-  const [loopQueue, setLoopQueue] = useState(false);
-
-  const toggleQueued = (slug: string) =>
-    setQueue((q) => (q.includes(slug) ? q.filter((s) => s !== slug) : [...q, slug]));
-
-  const playQueue = async () => {
-    const ok = await playPlaylistOnMaster(queue, loopQueue);
-    onNotify(
-      ok ? `Playing ${queue.length} shows as a playlist${loopQueue ? ' (looping)' : ''}` : 'Could not start the playlist',
-      ok ? 'success' : 'error',
-    );
-  };
 
   const refresh = useCallback(async () => {
     if (!master.connected) {
@@ -53,8 +37,6 @@ export function ShowsView({ master, onNotify }: ShowsViewProps) {
     setLoading(true);
     const list = await listMasterShows();
     setShows(list);
-    // Drop any queued slugs that no longer exist on the Master.
-    setQueue((q) => q.filter((slug) => list.some((s) => s.slug === slug)));
     setLoading(false);
   }, [master.connected]);
 
@@ -109,35 +91,11 @@ export function ShowsView({ master, onNotify }: ShowsViewProps) {
         </button>
       </header>
 
-      {master.connected && queue.length > 0 && (
-        <div className="mb-3 flex items-center gap-3 rounded-xl border border-purple/40 bg-purple/10 px-4 py-2.5">
-          <span className="text-[13px] font-medium text-text">
-            {queue.length} show{queue.length === 1 ? '' : 's'} queued
-          </span>
-          <button
-            onClick={() => setLoopQueue((v) => !v)}
-            title="Loop the whole playlist"
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
-              loopQueue
-                ? 'border-purple/50 bg-purple/25 text-purple-l'
-                : 'border-border/80 bg-bg3/40 text-muted hover:text-text'
-            }`}
-          >
-            <IconLoop className="h-3.5 w-3.5" /> Loop
-          </button>
-          <button
-            onClick={() => void playQueue()}
-            className="ml-auto flex items-center gap-1.5 rounded-lg border border-purple/40 bg-purple/20 px-3 py-1.5 text-[12px] font-medium text-purple-l transition-colors hover:bg-purple/30"
-          >
-            <IconPlay className="h-3.5 w-3.5" /> Play as playlist
-          </button>
-          <button
-            onClick={() => setQueue([])}
-            className="rounded-lg border border-border/80 bg-bg3/40 px-2.5 py-1.5 text-[12px] font-medium text-muted transition-colors hover:text-text"
-          >
-            Clear
-          </button>
-        </div>
+      {master.connected && shows.length > 0 && (
+        <p className="mb-3 rounded-lg border border-border/50 bg-bg2/30 px-3 py-2 text-[11px] text-muted">
+          Build playlists and set up nightly scheduling on the Master itself — its
+          web UI (<span className="text-text">{master.host}</span>) or touchscreen.
+        </p>
       )}
 
       {!master.connected ? (
@@ -162,17 +120,6 @@ export function ShowsView({ master, onNotify }: ShowsViewProps) {
                 s.active ? 'border-purple/40 bg-purple/10' : 'border-border/60 bg-bg2/40'
               }`}
             >
-              <button
-                onClick={() => toggleQueued(s.slug)}
-                title={queue.includes(s.slug) ? 'Remove from playlist' : 'Add to playlist (order = click order)'}
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold tabular-nums transition-colors ${
-                  queue.includes(s.slug)
-                    ? 'border-purple/50 bg-purple/25 text-purple-l'
-                    : 'border-border/70 bg-bg3/30 text-transparent hover:text-muted'
-                }`}
-              >
-                {queue.includes(s.slug) ? queue.indexOf(s.slug) + 1 : '+'}
-              </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-[14px] font-medium text-text">{s.name}</span>
