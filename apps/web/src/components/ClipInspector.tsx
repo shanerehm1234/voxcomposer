@@ -11,6 +11,7 @@ import { loadFixtureProfile } from '../fixtures/vibrary.js';
 import { paramsFromClipData, PIXEL_EFFECTS } from '../pixel/engine.js';
 import { effectiveAnimation } from '../pixel/wled.js';
 import type { VoxPlugin } from '@voxcomposer/plugin-sdk';
+import type { DeviceInventory } from '../voxlink/useMasterStatus.js';
 import { pluginRegistry } from '../plugins/registry.js';
 import { getPluginConfig } from '../plugins/config.js';
 import { getPluginApi } from '../plugins/host.js';
@@ -44,7 +45,7 @@ interface ClipInspectorProps {
   selectionCount?: number;
   /** Live SD inventory per device (UPPERCASE MAC), from the Master's /status —
    * drives the Eye picker's SD-card list. */
-  deviceInventories?: Map<string, string[]>;
+  deviceInventories?: Map<string, DeviceInventory>;
 }
 
 export function ClipInspector({
@@ -114,7 +115,7 @@ function ClipFields({
   clip: VoxClip;
   show: VoxShow;
   onChange: (next: VoxClip) => void;
-  deviceInventories?: Map<string, string[]>;
+  deviceInventories?: Map<string, DeviceInventory>;
 }) {
   // Local editable copy. Re-seeded when the selected/committed clip changes
   // (selection, undo, or a timeline drag) — never mid-keystroke, since text
@@ -140,6 +141,11 @@ function ClipFields({
     const track = show.tracks.find((t) => t.clips.some((c) => c.id === clip.id));
     return track ? show.devices.find((d) => d.id === track.deviceId) : undefined;
   }, [show, clip.id]);
+  // The device's live typed SD inventory (eyes + audio) from the Master's /status,
+  // keyed by MAC. Drives both the Eye picker and the audio "on the skull" list.
+  const liveInv =
+    deviceInventories?.get((trackDevice?.id ?? deviceId ?? '').toUpperCase()) ??
+    deviceInventories?.get((deviceId ?? '').toUpperCase());
   const fixture = draft.type === 'dmx' ? trackDevice?.fixture : undefined;
   const [profile, setProfile] = useState<FixtureProfile | null>(null);
   useEffect(() => {
@@ -395,12 +401,14 @@ function ClipFields({
               // eyes plus whatever .eye files the device reported (live from the
               // Master's /status, falling back to any inventory saved on the
               // device). Empty = leave the current eye as-is.
-              const liveInv =
-                deviceInventories?.get((trackDevice?.id ?? deviceId ?? '').toUpperCase()) ??
-                deviceInventories?.get((deviceId ?? '').toUpperCase());
-              const sdEyes = (liveInv ?? trackDevice?.inventory ?? device?.inventory ?? []).filter(
-                (n) => !BUILT_IN_EYES.includes(n as (typeof BUILT_IN_EYES)[number]),
-              );
+              // Live typed eyes when the Master reports them; else the flat
+              // inventory saved on the device (offline fallback).
+              const sdEyes = (
+                liveInv?.eyes ??
+                trackDevice?.inventory ??
+                device?.inventory ??
+                []
+              ).filter((n) => !BUILT_IN_EYES.includes(n as (typeof BUILT_IN_EYES)[number]));
               return (
                 <div className="mt-2.5">
                   <FieldLabel>Eye</FieldLabel>
@@ -673,30 +681,46 @@ function ClipFields({
         </>
       )}
 
-      {device?.inventory && (
-        <>
-          <SectionDivider>SD Card · {device.name}</SectionDivider>
-          <div className="mb-2.5 text-[11px] text-muted">
-            {device.inventory.length} file{device.inventory.length === 1 ? '' : 's'} on last scan
-          </div>
-          <ul className="space-y-1">
-            {device.inventory.map((file) => {
-              const active = file === data.filename;
-              return (
-                <li
-                  key={file}
-                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 font-mono text-xs ${
-                    active ? 'bg-purple/10 text-text ring-1 ring-inset ring-purple/25' : 'text-muted'
-                  }`}
-                >
-                  <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-purple-l' : 'bg-muted/40'}`} />
-                  {file}
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
+      {(() => {
+        // What audio is actually on the skull's SD right now: the Master's live
+        // typed inventory when available, else the flat list saved on the device.
+        const sdAudio = liveInv?.audio ?? device?.inventory;
+        if (!sdAudio) return null;
+        const live = liveInv?.audio != null;
+        return (
+          <>
+            <SectionDivider>SD Card · {device?.name ?? trackDevice?.name ?? 'Device'}</SectionDivider>
+            <div className="mb-2.5 text-[11px] text-muted">
+              {sdAudio.length} audio file{sdAudio.length === 1 ? '' : 's'}{' '}
+              {live ? 'on the skull now' : 'on last scan'}
+            </div>
+            {sdAudio.length === 0 ? (
+              <div className="rounded-md bg-bg/40 px-2 py-1.5 text-[11px] text-muted">
+                No audio synced yet — Send to Master syncs this show’s audio.
+              </div>
+            ) : (
+              <ul className="space-y-1">
+                {sdAudio.map((file) => {
+                  const active = file === data.filename;
+                  return (
+                    <li
+                      key={file}
+                      className={`flex items-center gap-2 rounded-md px-2 py-1.5 font-mono text-xs ${
+                        active ? 'bg-purple/10 text-text ring-1 ring-inset ring-purple/25' : 'text-muted'
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-purple-l' : 'bg-muted/40'}`}
+                      />
+                      {file}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }

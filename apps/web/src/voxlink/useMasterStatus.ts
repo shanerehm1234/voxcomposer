@@ -15,14 +15,21 @@ export interface MasterInfo {
   onboard: { type: string; channels?: number }[];
 }
 
+/** Typed SD inventory a remote reports: eye textures and audio files kept apart
+ *  so the clip Eye picker never lists a WAV, and audio can be browsed on its own. */
+export interface DeviceInventory {
+  eyes: string[];
+  audio: string[];
+}
+
 export interface MasterStatus {
   /** Whether the Master is currently reachable (active heartbeat, see below). */
   connected: boolean;
   /** Latest `device_status` per device ID, as reported by the Master. */
   devices: Map<string, DeviceStatusPayload>;
-  /** SD file inventory per device (UPPERCASE MAC key) from the Master's last
-   * /status — e.g. an OcularVox's `.eye` basenames for the clip Eye picker. */
-  inventories: Map<string, string[]>;
+  /** Typed SD inventory per device (UPPERCASE MAC key) from the Master's last
+   * /status — an OcularVox's `.eye` basenames and `/audio` filenames. */
+  inventories: Map<string, DeviceInventory>;
   /** The Master's own MAC + onboard I/O, when a readable /status was fetched. */
   info: MasterInfo | null;
   /**
@@ -68,7 +75,7 @@ async function masterIsAlive(httpBase: string): Promise<boolean> {
 export function useMasterStatus(): MasterStatus {
   const [connected, setConnected] = useState(false);
   const [devices, setDevices] = useState<Map<string, DeviceStatusPayload>>(new Map());
-  const [inventories, setInventories] = useState<Map<string, string[]>>(new Map());
+  const [inventories, setInventories] = useState<Map<string, DeviceInventory>>(new Map());
   const [info, setInfo] = useState<MasterInfo | null>(null);
   const devicesRef = useRef(devices);
   devicesRef.current = devices;
@@ -142,13 +149,16 @@ export function useMasterStatus(): MasterStatus {
               kind?: string;
               channels?: number;
               paired?: boolean;
+              eyes?: string[];
+              audio?: string[];
+              /** Legacy flat inventory from a pre-typed Master — treated as eyes. */
               fileList?: string[];
             }[];
           };
           if (!cancelled) {
             if (s.sys?.mac) setInfo({ mac: s.sys.mac, onboard: s.sys.onboard ?? [] });
             const next = new Map<string, DeviceStatusPayload>();
-            const inv = new Map<string, string[]>();
+            const inv = new Map<string, DeviceInventory>();
             for (const r of s.remotes ?? []) {
               next.set(r.id, {
                 deviceId: r.id,
@@ -160,7 +170,10 @@ export function useMasterStatus(): MasterStatus {
                 channels: r.channels,
                 paired: r.paired ?? false,
               });
-              if (r.fileList?.length) inv.set(r.id.toUpperCase(), r.fileList);
+              // Prefer the typed eyes/audio; fall back to a legacy flat fileList as eyes.
+              const eyes = r.eyes ?? r.fileList ?? [];
+              const audio = r.audio ?? [];
+              if (eyes.length || audio.length) inv.set(r.id.toUpperCase(), { eyes, audio });
             }
             setDevices(next);
             setInventories(inv);
