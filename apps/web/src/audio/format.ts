@@ -14,11 +14,6 @@ export function isAcceptedAudio(file: File): boolean {
   return ACCEPTED_AUDIO_EXT.some((ext) => name.endsWith(ext));
 }
 
-/** Determine the source format from a file's name/MIME. */
-export function detectFormat(file: File): AudioSourceFormat {
-  return detectFormatByName(file.name, file.type);
-}
-
 /** Determine the source format from a filename (+ optional MIME). */
 export function detectFormatByName(name: string, mime = ''): AudioSourceFormat {
   const n = name.toLowerCase();
@@ -35,15 +30,8 @@ export function isAcceptedAudioName(name: string): boolean {
   return ACCEPTED_AUDIO_EXT.some((ext) => n.endsWith(ext));
 }
 
-/**
- * SHA-256 of the file bytes (first 32 hex chars), used as the cache key for the
- * server-side WAV transcode so re-syncing an unchanged file never reconverts.
- */
-export async function hashFile(file: File): Promise<string> {
-  return hashBytes(await file.arrayBuffer());
-}
-
-/** SHA-256 (first 32 hex chars) of already-read bytes. */
+/** SHA-256 (first 32 hex chars) of already-read bytes, used as the cache key for
+ *  the server-side WAV transcode so re-syncing an unchanged file never reconverts. */
 export async function hashBytes(bytes: ArrayBuffer): Promise<string> {
   try {
     const digest = await crypto.subtle.digest('SHA-256', bytes);

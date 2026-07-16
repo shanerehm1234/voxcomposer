@@ -51,7 +51,3 @@ export function copyAsset(fromClipId: string, toClipId: string): AudioAsset | un
   assets.set(toClipId, src);
   return src;
 }
-
-export function removeAsset(clipId: string): void {
-  assets.delete(clipId);
-}

@@ -25,19 +25,6 @@ export const WLED_EFFECTS: [number, string][] = [
   [23, 'Strobe'],
 ];
 
-export const WLED_PALETTES: [number, string][] = [
-  [0, 'Default'],
-  [1, 'Random Cycle'],
-  [2, 'Primary Color'],
-  [3, 'Based on Primary'],
-  [6, 'Party'],
-  [7, 'Cloud'],
-  [8, 'Lava'],
-  [9, 'Ocean'],
-  [10, 'Forest'],
-  [11, 'Rainbow'],
-];
-
 /** Nearest preview primitive for a WLED effect id. */
 const WLED_TO_PRIMITIVE: Record<number, string> = {
   0: 'solid',

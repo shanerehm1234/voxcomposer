@@ -75,15 +75,3 @@ export async function loadFixtureProfile(id: string): Promise<FixtureProfile | n
     return null;
   }
 }
-
-/** Import a profile JSON the user picked from disk (offline fallback). */
-export function importProfileJson(text: string): FixtureProfile {
-  const profile = FixtureProfile.parse(JSON.parse(text));
-  profileMemo.set(profile.id, profile);
-  try {
-    localStorage.setItem(PROFILE_KEY(profile.id), JSON.stringify(profile));
-  } catch {
-    /* cache full */
-  }
-  return profile;
-}

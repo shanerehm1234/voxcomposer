@@ -19,8 +19,7 @@
     "@voxcomposer/shared": "workspace:*",
     "cors": "^2.8.5",
     "express": "^4.21.1",
-    "ws": "^8.18.0",
-    "zod": "^3.23.8"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
