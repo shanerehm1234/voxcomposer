@@ -1,6 +1,7 @@
 import type { VoxShow } from '@voxcomposer/shared';
 import { serializeShow } from '../vox/voxFile.js';
 import { bakeShow } from '../plugins/bake.js';
+import { isDemoMode } from '../demo/demoData.js';
 
 /**
  * Connection config for the Vox Master, persisted in localStorage so the
@@ -66,6 +67,7 @@ export async function sendShowToMaster(show: VoxShow): Promise<SendResult> {
 
 /** Trigger playback of the active show on the Master (`POST /play`). */
 export async function playOnMaster(): Promise<boolean> {
+  if (isDemoMode()) return true;
   try {
     const res = await fetch(`${masterHttpBase()}/play`, { method: 'POST' });
     return res.ok;
@@ -82,8 +84,17 @@ export interface LibraryShow {
   active: boolean;
 }
 
+/** A stand-in Master library for the hosted showcase, so the Show Library tab is
+ *  populated instead of hitting an unreachable hub (see isDemoMode). */
+const DEMO_SHOWS: LibraryShow[] = [
+  { slug: 'haunted-hallway', name: 'Haunted Hallway', clips: 22, durationMs: 32_000, active: true },
+  { slug: 'cemetery-gate', name: 'Cemetery Gate', clips: 14, durationMs: 45_000, active: false },
+  { slug: 'jump-scare', name: 'Jump Scare', clips: 9, durationMs: 12_000, active: false },
+];
+
 /** List the shows saved in the Master's library (`GET /shows`) — used to populate the playlist editor. */
 export async function listMasterShows(): Promise<LibraryShow[]> {
+  if (isDemoMode()) return DEMO_SHOWS.map((s) => ({ ...s }));
   try {
     const res = await fetch(`${masterHttpBase()}/shows`);
     if (!res.ok) return [];
@@ -95,6 +106,10 @@ export async function listMasterShows(): Promise<LibraryShow[]> {
 
 /** Make a library show the active one (`POST /activate?slug=`) — Play then runs it. */
 export async function activateMasterShow(slug: string): Promise<boolean> {
+  if (isDemoMode()) {
+    for (const s of DEMO_SHOWS) s.active = s.slug === slug;
+    return true;
+  }
   try {
     const res = await fetch(`${masterHttpBase()}/activate?slug=${encodeURIComponent(slug)}`, {
       method: 'POST',
@@ -107,6 +122,11 @@ export async function activateMasterShow(slug: string): Promise<boolean> {
 
 /** Delete a library show from the Master (`DELETE /show?slug=`). */
 export async function deleteMasterShow(slug: string): Promise<boolean> {
+  if (isDemoMode()) {
+    const i = DEMO_SHOWS.findIndex((s) => s.slug === slug);
+    if (i >= 0) DEMO_SHOWS.splice(i, 1);
+    return true;
+  }
   try {
     const res = await fetch(`${masterHttpBase()}/show?slug=${encodeURIComponent(slug)}`, {
       method: 'DELETE',

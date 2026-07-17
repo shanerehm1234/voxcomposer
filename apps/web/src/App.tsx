@@ -67,8 +67,14 @@ export function App() {
       window.history.replaceState(null, '', `#${activeView}`);
     }
   }, [activeView]);
-  const [selectedClipIds, setSelectedClipIds] = useState<string[]>(['c-skelly1-intro']);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>('SK:01');
+  // Boot with a real clip selected so the inspector is populated on first paint
+  // (demo mode). Falls back gracefully to nothing selected on a real install.
+  const [selectedClipIds, setSelectedClipIds] = useState<string[]>(
+    isDemoMode() ? ['c-sk1-v1'] : [],
+  );
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(
+    isDemoMode() ? 'SK:01' : null,
+  );
 
   // The primary (last) selection drives the inspector.
   const primaryClipId = selectedClipIds[selectedClipIds.length - 1] ?? null;
