@@ -37,3 +37,6 @@ apps/web/dev-dist/
 *.db-journal
 .cache/
 apps/server/prisma/*.db
+
+# stray test-show exports saved by the desktop app during dev
+apps/desktop/src-tauri/*.vox
