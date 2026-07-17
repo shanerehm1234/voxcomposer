@@ -96,8 +96,11 @@ export function makeEmptyState(): DemoState {
 }
 
 /**
- * Demo state mirroring the design mockup ("Haunted Hallway 2025"). Only used
- * in demo mode (see isDemoMode) — a real install never sees these devices.
+ * Demo state: a fully-dressed sample show ("Haunted Hallway") so a first-time
+ * visitor to voxcomposer.app sees the whole system working — animatronic skulls
+ * with synced jaws + glowing eyes, pixel props, DMX, fog, and a smart-home
+ * plugin — all on one designed timeline. Only used in demo mode (see
+ * isDemoMode); a real install boots empty.
  */
 export function makeDemoState(): DemoState {
   // Built-in plugins must be registered before the timeline renders plugin
@@ -106,13 +109,15 @@ export function makeDemoState(): DemoState {
   const now = new Date().toISOString();
   const show: VoxShow = {
     version: VOX_FORMAT_VERSION,
-    name: 'Haunted Hallway 2025',
+    name: 'Haunted Hallway',
     created: now,
     modified: now,
-    duration: 30_000,
+    duration: 32_000,
     bpm: 120,
     devices: [
       { id: 'MA:STR', name: 'Master', type: 'audio', apiVersion: '1.0.0' },
+      { id: 'HUE:1', name: 'Smart Lights', type: 'custom', apiVersion: '1.0.0' },
+      { id: 'DMX:1', name: 'Front Lights', type: 'dmx', apiVersion: '1.0.0' },
       { id: 'WLED:1', name: 'Porch Pixels', type: 'pixel', apiVersion: '1.0.0' },
       { id: 'RING:1', name: 'Eye Ring', type: 'pixel', apiVersion: '1.0.0' },
       {
@@ -120,11 +125,16 @@ export function makeDemoState(): DemoState {
         name: 'Skelly 1',
         type: 'skull',
         apiVersion: '1.0.0',
-        inventory: ['skelly1_intro.wav', 'skelly1_punchline.wav', 'skelly1_laugh.wav'],
+        inventory: ['Dragon', 'Cat', 'skelly1_intro.wav', 'skelly1_laugh.wav'],
       },
-      { id: 'SK:02', name: 'Skelly 2', type: 'skull', apiVersion: '1.0.0' },
-      { id: 'DMX:1', name: 'Front lights', type: 'dmx', apiVersion: '1.0.0' },
-      { id: 'FOG:1', name: 'Fog machine', type: 'relay', apiVersion: '1.0.0' },
+      {
+        id: 'SK:02',
+        name: 'Skelly 2',
+        type: 'skull',
+        apiVersion: '1.0.0',
+        inventory: ['Owl', 'Goat', 'skelly2_reply.wav'],
+      },
+      { id: 'FOG:1', name: 'Fog Machine', type: 'relay', apiVersion: '1.0.0' },
     ],
     tracks: [
       {
@@ -133,11 +143,31 @@ export function makeDemoState(): DemoState {
         type: 'audio',
         label: 'Ambient',
         clips: [
-          clip('c-ambient', 0, 26_000, 'audio', {
+          clip('c-ambient', 0, 32_000, 'audio', {
             filename: 'haunted_atmosphere_loop.wav',
             deviceId: 'MA:STR',
-            volume: 0.8,
+            volume: 0.7,
             jawSync: false,
+          }),
+        ],
+      },
+      {
+        id: 't-hue',
+        deviceId: 'HUE:1',
+        type: 'hue', // Philips Hue plugin (built-in) — routed by deviceId, baked into the .vox
+        label: 'Smart Lights',
+        clips: [
+          clip('c-hue-1', 0, 8_800, 'hue', {
+            kind: 'group', groupId: '0', groupName: 'all lights', on: true,
+            useColor: true, color: '#5B2A86', bri: 60, transitionMs: 2000,
+          }),
+          clip('c-hue-2', 9_000, 900, 'hue', {
+            kind: 'group', groupId: '0', groupName: 'all lights', on: true,
+            useColor: true, color: '#FFFFFF', bri: 254, transitionMs: 0,
+          }),
+          clip('c-hue-3', 20_000, 10_000, 'hue', {
+            kind: 'scene', sceneId: 'spooky', sceneName: 'Blood Moon', on: true,
+            useColor: true, color: '#8A0303', bri: 120, transitionMs: 1500,
           }),
         ],
       },
@@ -145,35 +175,12 @@ export function makeDemoState(): DemoState {
         id: 't-dmx',
         deviceId: 'DMX:1',
         type: 'dmx',
-        label: 'DMX Lights',
+        label: 'Front Lights',
         clips: [
-          clip('c-wash', 1_000, 6_500, 'dmx', { universe: 0, channel: 1, value: 102, fadeMs: 1000 }),
-          clip('c-flash', 8_200, 1_400, 'dmx', { universe: 0, channel: 5, value: 255, fadeMs: 0 }),
+          clip('c-dmx-wash', 1_500, 6_500, 'dmx', { universe: 0, channel: 1, value: 110, fadeMs: 1500 }),
+          clip('c-dmx-strobe', 9_000, 1_200, 'dmx', { universe: 0, channel: 5, value: 255, fadeMs: 0 }),
+          clip('c-dmx-color', 15_000, 8_000, 'dmx', { universe: 0, channel: 3, value: 180, fadeMs: 900 }),
         ],
-      },
-      {
-        id: 't-skelly1',
-        deviceId: 'SK:01',
-        type: 'audio',
-        label: 'Skelly 1',
-        clips: [
-          clip('c-skelly1-intro', 1_000, 8_400, 'audio', {
-            filename: 'skelly1_intro.wav',
-            deviceId: 'SK:01',
-            volume: 1,
-            jawSync: true,
-            jawMode: 'FFT auto',
-            neck: { pan: 'wander', tilt: 'wander', roll: 'wander', speed: 'talk+' },
-          }),
-        ],
-      },
-      { id: 't-skelly2', deviceId: 'SK:02', type: 'audio', label: 'Skelly 2', clips: [] },
-      {
-        id: 't-fog',
-        deviceId: 'FOG:1',
-        type: 'relay',
-        label: 'Relay — Fog',
-        clips: [clip('c-fog', 600, 900, 'relay', { channel: 1, action: 'pulse', durationMs: 900 })],
       },
       {
         id: 't-wled',
@@ -181,19 +188,9 @@ export function makeDemoState(): DemoState {
         type: 'pixel',
         label: 'Porch Pixels',
         clips: [
-          // wledFx/palette/speed are the Phase-2 fields — the Master relays them
-          // verbatim to the VoxPixel remote, which applies them via WLED's own
-          // effect engine. No direct device IP involved; routing is by deviceId.
-          clip('c-wled-1', 800, 4000, 'pixel', {
-            animation: 'glow',
-            color: '#FF6A00',
-            wledFx: 3,
-          }),
-          clip('c-wled-2', 8200, 1600, 'pixel', {
-            animation: 'flash',
-            color: '#FFFFFF',
-            wledFx: 7,
-          }),
+          clip('c-wled-1', 1_000, 7_000, 'pixel', { animation: 'glow', color: '#FF6A00', wledFx: 3 }),
+          clip('c-wled-2', 9_000, 1_400, 'pixel', { animation: 'lightning', color: '#FFFFFF', wledFx: 7 }),
+          clip('c-wled-3', 22_000, 9_000, 'pixel', { animation: 'chase', color: '#39FF14', wledFx: 28 }),
         ],
       },
       {
@@ -202,9 +199,68 @@ export function makeDemoState(): DemoState {
         type: 'pixel',
         label: 'Eye Ring',
         clips: [
-          clip('c-ring-1', 1000, 5000, 'pixel', { animation: 'glow', color: '#1030FF', brightness: 200 }),
-          clip('c-ring-2', 8200, 1400, 'pixel', { animation: 'flash', color: '#FF2A2A', brightness: 255 }),
-          clip('c-ring-3', 22000, 6000, 'pixel', { animation: 'chase', color: '#39FF14', brightness: 180 }),
+          clip('c-ring-1', 1_500, 5_000, 'pixel', { animation: 'glow', color: '#1030FF', brightness: 200 }),
+          clip('c-ring-2', 9_100, 1_100, 'pixel', { animation: 'flash', color: '#FF2A2A', brightness: 255 }),
+          clip('c-ring-3', 16_000, 6_000, 'pixel', { animation: 'twinkle', color: '#8B6DFF', brightness: 170 }),
+          clip('c-ring-4', 24_000, 6_000, 'pixel', { animation: 'chase', color: '#39FF14', brightness: 190 }),
+        ],
+      },
+      {
+        id: 't-sk1-eyes',
+        deviceId: 'SK:01',
+        type: 'eyes',
+        label: 'Skelly 1 · Eyes',
+        clips: [
+          clip('c-sk1-eye-1', 2_500, 6_500, 'eyes', { eye: 'Dragon', animation: 'glow', color: '#FF2A2A' }),
+          clip('c-sk1-eye-2', 12_000, 4_000, 'eyes', { eye: 'Dragon', animation: 'angry', color: '#FF0000', lookX: 0.4 }),
+          clip('c-sk1-eye-3', 20_000, 5_000, 'eyes', { eye: 'Dragon', animation: 'flicker', color: '#FF6A00' }),
+        ],
+      },
+      {
+        id: 't-sk1-voice',
+        deviceId: 'SK:01',
+        type: 'audio',
+        label: 'Skelly 1 · Voice',
+        clips: [
+          clip('c-sk1-v1', 3_000, 8_400, 'audio', {
+            filename: 'skelly1_intro.wav', deviceId: 'SK:01', volume: 1, jawSync: true,
+            jawMode: 'FFT auto', neck: { pan: 'wander', tilt: 'wander', roll: 'nod', speed: 'talk+' },
+          }),
+          clip('c-sk1-v2', 20_500, 3_600, 'audio', {
+            filename: 'skelly1_laugh.wav', deviceId: 'SK:01', volume: 1, jawSync: true, jawMode: 'FFT auto',
+          }),
+        ],
+      },
+      {
+        id: 't-sk2-eyes',
+        deviceId: 'SK:02',
+        type: 'eyes',
+        label: 'Skelly 2 · Eyes',
+        clips: [
+          clip('c-sk2-eye-1', 10_000, 5_500, 'eyes', { eye: 'Owl', animation: 'glow', color: '#30A0FF' }),
+          clip('c-sk2-eye-2', 24_000, 5_000, 'eyes', { eye: 'Owl', animation: 'scan', color: '#39FF14' }),
+        ],
+      },
+      {
+        id: 't-sk2-voice',
+        deviceId: 'SK:02',
+        type: 'audio',
+        label: 'Skelly 2 · Voice',
+        clips: [
+          clip('c-sk2-v1', 11_000, 7_000, 'audio', {
+            filename: 'skelly2_reply.wav', deviceId: 'SK:02', volume: 1, jawSync: true,
+            jawMode: 'FFT auto', neck: { pan: 'wander', tilt: 'still', roll: 'still', speed: 'talk' },
+          }),
+        ],
+      },
+      {
+        id: 't-fog',
+        deviceId: 'FOG:1',
+        type: 'relay',
+        label: 'Fog',
+        clips: [
+          clip('c-fog-1', 2_000, 900, 'relay', { channel: 1, action: 'pulse', durationMs: 900 }),
+          clip('c-fog-2', 23_500, 1_200, 'relay', { channel: 1, action: 'pulse', durationMs: 1200 }),
         ],
       },
     ],
@@ -215,32 +271,35 @@ export function makeDemoState(): DemoState {
     show,
     devices: [
       // prettier-ignore
-      { id: 'SK:01', name: 'Skelly 1', type: 'skull', connection: 'online', rssi: -52, apiVersion: '1.0.0', firmware: 'vox-skull 2.4.1', battery: 88, sdUsedMb: 2.1, sdTotalMb: 32, fileCount: 3, supportsFormats: ['wav'], audioSpec: { sampleRate: 44100, bitDepth: 16, channels: 2 } },
+      { id: 'SK:01', name: 'Skelly 1', type: 'skull', connection: 'online', rssi: -52, apiVersion: '1.0.0', firmware: 'net 1.2.11', battery: 88, sdUsedMb: 2.1, sdTotalMb: 32, fileCount: 4, supportsFormats: ['wav'], audioSpec: { sampleRate: 44100, bitDepth: 16, channels: 2 } },
       // prettier-ignore
-      { id: 'SK:02', name: 'Skelly 2', type: 'skull', connection: 'online', rssi: -58, apiVersion: '1.0.0', firmware: 'vox-skull 2.4.1', battery: 64, sdUsedMb: 1.4, sdTotalMb: 32, fileCount: 2, supportsFormats: ['wav'], audioSpec: { sampleRate: 44100, bitDepth: 16, channels: 2 } },
+      { id: 'SK:02', name: 'Skelly 2', type: 'skull', connection: 'online', rssi: -58, apiVersion: '1.0.0', firmware: 'net 1.2.11', battery: 64, sdUsedMb: 1.4, sdTotalMb: 32, fileCount: 3, supportsFormats: ['wav'], audioSpec: { sampleRate: 44100, bitDepth: 16, channels: 2 } },
       // prettier-ignore
-      { id: 'SK:03', name: 'Skelly 3', type: 'skull', connection: 'online', rssi: -61, apiVersion: '1.0.0', firmware: 'vox-skull 2.4.0', battery: 41, sdUsedMb: 3.0, sdTotalMb: 32, fileCount: 4, supportsFormats: ['wav'], audioSpec: { sampleRate: 44100, bitDepth: 16, channels: 2 } },
+      { id: 'HUE:1', name: 'Smart Lights', type: 'custom', iconHint: 'dmx', connection: 'online', apiVersion: '1.0.0', firmware: 'Hue plugin' },
       // prettier-ignore
-      { id: 'FOG:1', name: 'Fog machine', type: 'relay', iconHint: 'fog', connection: 'online', rssi: -49, apiVersion: '1.0.0', firmware: 'vox-relay 1.8.2' },
+      { id: 'WLED:1', name: 'Porch Pixels', type: 'pixel', connection: 'online', rssi: -55, ip: '192.168.1.42', apiVersion: '1.0.0', firmware: 'voxpixel 1.0.0', pixelCount: 60 },
       // prettier-ignore
-      { id: 'DMX:1', name: 'Front lights', type: 'dmx', connection: 'offline', apiVersion: '0.9.4', firmware: 'vox-dmx 1.2.0', lastSeen: '2h ago' },
+      { id: 'RING:1', name: 'Eye Ring', type: 'pixel', connection: 'online', rssi: -60, ip: '192.168.1.43', apiVersion: '1.0.0', firmware: 'voxpixel 1.0.0', pixelCount: 24 },
       // prettier-ignore
-      { id: 'SEN:1', name: 'Entry sensor', type: 'sense', iconHint: 'motion', connection: 'offline', apiVersion: '1.0.0', firmware: 'vox-sense 1.1.0', battery: 12, lastSeen: 'yesterday' },
+      { id: 'FOG:1', name: 'Fog Machine', type: 'relay', iconHint: 'fog', connection: 'online', rssi: -49, apiVersion: '1.0.0', firmware: 'voxrelay 1.1.4', relayCount: 2 },
+      // prettier-ignore
+      { id: 'DMX:1', name: 'Front Lights', type: 'dmx', connection: 'online', rssi: -47, apiVersion: '1.0.0', firmware: 'onboard' },
+      // prettier-ignore
+      { id: 'SEN:1', name: 'Entry Sensor', type: 'sense', iconHint: 'motion', connection: 'offline', apiVersion: '1.0.0', firmware: 'voxsense 1.1.0', battery: 12, lastSeen: 'yesterday' },
     ],
     media: [
       { id: 'm1', filename: 'skelly1_intro.wav', kind: 'voice', format: 'wav', durationMs: 8400, sizeKb: 723, syncedDeviceIds: ['SK:01'] },
-      { id: 'm2', filename: 'skelly1_punchline.mp3', kind: 'voice', format: 'mp3', durationMs: 5200, sizeKb: 84, syncedDeviceIds: ['SK:01'] },
-      { id: 'm3', filename: 'skelly1_laugh.mp3', kind: 'voice', format: 'mp3', durationMs: 3600, sizeKb: 58, syncedDeviceIds: ['SK:01'] },
-      { id: 'm4', filename: 'skelly2_reply.mp3', kind: 'voice', format: 'mp3', durationMs: 7000, sizeKb: 112, syncedDeviceIds: ['SK:02'] },
-      { id: 'm5', filename: 'haunted_atmosphere_loop.mp3', kind: 'ambient', format: 'mp3', durationMs: 26000, sizeKb: 412, syncedDeviceIds: ['MA:STR'] },
-      { id: 'm6', filename: 'thunder_crack.wav', kind: 'sfx', format: 'wav', durationMs: 2100, sizeKb: 180, syncedDeviceIds: [] },
-      { id: 'm7', filename: 'door_creak.ogg', kind: 'sfx', format: 'ogg', durationMs: 1800, sizeKb: 47, syncedDeviceIds: ['SK:03'] },
-      { id: 'm8', filename: 'organ_sting.m4a', kind: 'sfx', format: 'm4a', durationMs: 3300, sizeKb: 76, syncedDeviceIds: [] },
+      { id: 'm2', filename: 'skelly1_laugh.wav', kind: 'voice', format: 'wav', durationMs: 3600, sizeKb: 310, syncedDeviceIds: ['SK:01'] },
+      { id: 'm3', filename: 'skelly2_reply.mp3', kind: 'voice', format: 'mp3', durationMs: 7000, sizeKb: 112, syncedDeviceIds: ['SK:02'] },
+      { id: 'm4', filename: 'haunted_atmosphere_loop.mp3', kind: 'ambient', format: 'mp3', durationMs: 32000, sizeKb: 512, syncedDeviceIds: ['MA:STR'] },
+      { id: 'm5', filename: 'thunder_crack.wav', kind: 'sfx', format: 'wav', durationMs: 2100, sizeKb: 180, syncedDeviceIds: [] },
+      { id: 'm6', filename: 'door_creak.ogg', kind: 'sfx', format: 'ogg', durationMs: 1800, sizeKb: 47, syncedDeviceIds: [] },
+      { id: 'm7', filename: 'organ_sting.m4a', kind: 'sfx', format: 'm4a', durationMs: 3300, sizeKb: 76, syncedDeviceIds: [] },
     ],
     showFiles: [
-      { name: 'Scene_01.vox', active: true },
-      { name: 'Scene_02.vox', active: false },
-      { name: 'Intro_scare.vox', active: false },
+      { name: 'Haunted Hallway.vox', active: true },
+      { name: 'Cemetery Gate.vox', active: false },
+      { name: 'Jump Scare.vox', active: false },
     ],
     master: { connected: true, ip: 'voxmaster.local' },
   };

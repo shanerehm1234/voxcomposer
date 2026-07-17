@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { decodeVoxLink, encodeVoxLink, VOX_EVENTS, type DeviceStatusPayload } from '@voxcomposer/shared';
 import { masterWsUrl } from './client.js';
 import { getMasterConfig, masterHttpBase } from './master.js';
+import { isDemoMode } from '../demo/demoData.js';
 
 /** How often to ping the Master for liveness + re-scan its device list. */
 const HEARTBEAT_MS = 4000;
@@ -82,6 +83,14 @@ export function useMasterStatus(): MasterStatus {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    // The hosted demo (voxcomposer.app / ?demo) is a self-contained showcase:
+    // show a simulated-connected Master and never poll a real one, so it looks
+    // identical everywhere and never flips to "disconnected" for a visitor.
+    if (isDemoMode()) {
+      setConnected(true);
+      return;
+    }
+
     let cancelled = false;
     let ws: WebSocket | null = null;
 
