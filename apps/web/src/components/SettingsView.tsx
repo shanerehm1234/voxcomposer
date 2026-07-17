@@ -1,5 +1,5 @@
 import { VOX_FORMAT_VERSION, VOX_LINK_API_VERSION } from '@voxcomposer/shared';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { VoxPlugin } from '@voxcomposer/plugin-sdk';
 import { registerBuiltins } from '../plugins/builtins.js';
 import { pluginRegistry } from '../plugins/registry.js';
@@ -7,7 +7,14 @@ import { getPluginConfig, setPluginConfig, subscribePluginConfig } from '../plug
 import { getPluginApi } from '../plugins/host.js';
 import { installPluginFromUrl, isExternalPlugin, uninstallPlugin } from '../plugins/loader.js';
 import { masterWsUrl, testMasterConnection } from '../voxlink/client.js';
-import { getMasterConfig, setMasterConfig } from '../voxlink/master.js';
+import {
+  getMasterConfig,
+  setMasterConfig,
+  checkMasterUpdate,
+  applyMasterUpdate,
+  getMasterUpdateState,
+  type MasterUpdateInfo,
+} from '../voxlink/master.js';
 import { IconCheck, IconChip, IconRefresh } from './icons.js';
 import { ViewHeader } from './DevicesView.js';
 
@@ -131,6 +138,8 @@ export function SettingsView({ master, onReset }: SettingsViewProps) {
             </div>
           </Section>
 
+          <MasterFirmwareSection connected={master.connected} />
+
           <Section title="Audio & Playback" desc="Defaults for new shows and local preview.">
             <Row label="Default BPM">
               <input
@@ -245,6 +254,98 @@ function Row({
       </div>
       {children}
     </div>
+  );
+}
+
+/**
+ * One-click "Update Master" over the air: asks the Master to check GitHub, and
+ * if an update exists, kicks off its self-flash and polls the live progress. The
+ * Master downloads + installs itself (see VOXMASTER vox_update) — the Composer
+ * just drives its REST endpoints so you never touch a file or a cable.
+ */
+function MasterFirmwareSection({ connected }: { connected: boolean }) {
+  const [info, setInfo] = useState<MasterUpdateInfo | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+
+  const check = useCallback(async () => {
+    if (!connected) return;
+    setChecking(true);
+    setInfo(await checkMasterUpdate());
+    setChecking(false);
+  }, [connected]);
+
+  useEffect(() => {
+    if (connected) void check();
+  }, [connected, check]);
+
+  const apply = async () => {
+    if (!(await applyMasterUpdate())) {
+      setProgress('Could not start the update — try again.');
+      return;
+    }
+    setProgress('starting…');
+    const t = setInterval(async () => {
+      const s = await getMasterUpdateState();
+      if (s === 'rebooting') {
+        clearInterval(t);
+        setProgress('Installed — the Master is rebooting, reconnecting in ~25s…');
+        setTimeout(() => {
+          setProgress(null);
+          void check();
+        }, 25000);
+      } else if (s === 'failed') {
+        clearInterval(t);
+        setProgress('Update failed — check the Master and try again.');
+      } else {
+        setProgress(s || 'working…');
+      }
+    }, 2000);
+  };
+
+  return (
+    <Section title="Master Firmware" desc="Update the Vox Master's firmware over the air.">
+      {!connected ? (
+        <div className="text-[13px] text-muted">
+          Connect to a Master above to check for firmware updates.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Row label="Installed">
+            <span className="font-mono text-[13px] text-muted">
+              {info?.current ? `v${info.current}` : '—'}
+            </span>
+          </Row>
+          {progress ? (
+            <div className="rounded-lg border border-purple/40 bg-purple/10 px-3 py-2 text-[13px] text-purple-l">
+              {progress}
+            </div>
+          ) : info?.available ? (
+            <div className="rounded-lg border border-border/60 bg-bg/40 p-3">
+              <div className="text-[13px] font-medium text-text">Update available — v{info.latest}</div>
+              {info.notes && <p className="mt-1 text-[12px] text-muted">{info.notes}</p>}
+              <button
+                onClick={() => void apply()}
+                className="mt-2 rounded-lg border border-purple/50 bg-purple/20 px-3 py-1.5 text-[13px] font-medium text-purple-l transition-colors hover:bg-purple/30"
+              >
+                ⬇ Update Master &amp; reboot
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-[13px] text-muted">
+              <span>{info ? 'You’re on the latest firmware.' : 'Could not reach the Master.'}</span>
+              <button
+                onClick={() => void check()}
+                disabled={checking}
+                className="rounded-md border border-border/70 bg-bg3/40 px-2 py-1 text-[12px] text-text transition-colors hover:border-purple/50 disabled:opacity-40"
+              >
+                {checking ? 'Checking…' : 'Check again'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </Section>
   );
 }
 

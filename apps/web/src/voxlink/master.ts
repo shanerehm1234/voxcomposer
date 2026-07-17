@@ -116,3 +116,47 @@ export async function deleteMasterShow(slug: string): Promise<boolean> {
     return false;
   }
 }
+
+// --- Master firmware over-the-air update (drives its own `vox_update`) --------
+
+export interface MasterUpdateInfo {
+  ok: boolean; // the manifest fetch itself succeeded
+  current: string;
+  latest: string;
+  available: boolean;
+  notes: string;
+}
+
+/** Ask the Master to check GitHub for a firmware update (`GET /update/check`). */
+export async function checkMasterUpdate(): Promise<MasterUpdateInfo | null> {
+  try {
+    const res = await fetch(`${masterHttpBase()}/update/check`);
+    if (!res.ok) return null;
+    return (await res.json()) as MasterUpdateInfo;
+  } catch {
+    return null;
+  }
+}
+
+/** Tell the Master to download + self-flash the checked update (`POST /update/apply`). */
+export async function applyMasterUpdate(): Promise<boolean> {
+  try {
+    const res = await fetch(`${masterHttpBase()}/update/apply`, { method: 'POST' });
+    const j = (await res.json().catch(() => ({}))) as { ok?: boolean };
+    return !!j.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Poll the Master's live update progress (`GET /update/state`): "idle" |
+ *  "downloading NN%" | "installing" | "rebooting" | "failed". */
+export async function getMasterUpdateState(): Promise<string> {
+  try {
+    const res = await fetch(`${masterHttpBase()}/update/state`);
+    const j = (await res.json().catch(() => ({}))) as { state?: string };
+    return j.state ?? '';
+  } catch {
+    return '';
+  }
+}
