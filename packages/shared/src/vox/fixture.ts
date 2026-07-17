@@ -75,24 +75,60 @@ export type FixtureAssignment = z.infer<typeof FixtureAssignment>;
 /** A look: semantic role → value 0..255 (e.g. { DIMMER: 200, PAN: 32 }). */
 export type FixtureLook = Record<string, number>;
 
+/** A compiled wire level. `fade:false` marks a channel that must SNAP (never
+ *  slew through intermediate values) even when the clip has a fadeMs — a color
+ *  or gobo wheel slot, a shutter/strobe value, a control/speed channel. Absent
+ *  `fade` means the Master may ramp it (default true). */
+export interface CompiledLevel {
+  channel: number;
+  value: number;
+  fade?: boolean;
+}
+
 /**
- * Compile a look into absolute (channel, value) pairs for the wire. Roles the
- * profile doesn't have are skipped; channels past 512 are dropped. Pure — the
+ * Roles that select a discrete state rather than a continuous magnitude —
+ * fading these would step through wrong wheel slots / strobe rates, so they
+ * SNAP. Everything else (PAN/TILT/DIMMER/FOCUS/ZOOM/IRIS/RGB…) is left to fade
+ * so a moving head sweeps smoothly between cues.
+ */
+const SNAP_ROLES = new Set([
+  'COLOR_WHEEL',
+  'COLOR_WHEEL_2',
+  'GOBO_WHEEL',
+  'GOBO_WHEEL_2',
+  'SHUTTER',
+  'STROBE',
+  'PRISM',
+  'CONTROL',
+  'FUNCTION',
+  'MACRO',
+  'RESET',
+  'LAMP',
+  'PAN_TILT_SPEED',
+  'SPEED',
+]);
+
+/**
+ * Compile a look into absolute wire levels. Roles the profile doesn't have are
+ * skipped; channels past 512 are dropped. Each level is tagged with whether it
+ * may fade (continuous roles) or must snap (wheels/shutter/control). Pure — the
  * Composer compiles at edit time and stores the result on the clip, so the
- * Master and the VoxDMX remote never need fixture awareness.
+ * Master and the VoxDMX remote never need fixture awareness, only the flag.
  */
 export function compileLook(
   profile: Pick<FixtureProfile, 'channels'>,
   startChannel: number,
   look: FixtureLook,
-): { channel: number; value: number }[] {
-  const out: { channel: number; value: number }[] = [];
+): CompiledLevel[] {
+  const out: CompiledLevel[] = [];
   for (const ch of profile.channels) {
     const value = look[ch.role];
     if (value === undefined) continue;
     const channel = startChannel + ch.offset - 1;
     if (channel < 1 || channel > 512) continue;
-    out.push({ channel, value: Math.max(0, Math.min(255, Math.round(value))) });
+    const level: CompiledLevel = { channel, value: Math.max(0, Math.min(255, Math.round(value))) };
+    if (SNAP_ROLES.has(ch.role)) level.fade = false;
+    out.push(level);
   }
   return out.sort((a, b) => a.channel - b.channel);
 }
