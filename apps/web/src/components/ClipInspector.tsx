@@ -18,6 +18,7 @@ import { getPluginApi } from '../plugins/host.js';
 import { trackColor } from '../styles/palette.js';
 import { PixelPreview } from './PixelPreview.js';
 import { EyePreview } from './EyePreview.js';
+import { FixturePreview } from './FixturePreview.js';
 
 /** Neck-motion presets the skull board understands per axis / for speed. */
 const AXIS_MODES = ['fixed', 'wander', 'track', 'sweep', 'nod'];
@@ -282,15 +283,20 @@ function ClipFields({
       )}
 
       {isDmx && profile && fixture && (
-        <LookEditor
-          profile={profile}
-          look={(data.look as FixtureLook | undefined) ?? {}}
-          onEdit={(look) => patchData({ look })}
-          onCommit={(look) => {
-            const levels = compileLook(profile, fixture.startChannel, look);
-            commitData({ look, levels, universe: fixture.universe });
-          }}
-        />
+        <>
+          <div className="mb-3 overflow-hidden rounded-lg border border-border/60 bg-bg/40">
+            <FixturePreview profile={profile} look={(data.look as FixtureLook | undefined) ?? {}} />
+          </div>
+          <LookEditor
+            profile={profile}
+            look={(data.look as FixtureLook | undefined) ?? {}}
+            onEdit={(look) => patchData({ look })}
+            onCommit={(look) => {
+              const levels = compileLook(profile, fixture.startChannel, look);
+              commitData({ look, levels, universe: fixture.universe });
+            }}
+          />
+        </>
       )}
 
       {isDmx && !(profile && fixture) && (

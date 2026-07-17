@@ -186,12 +186,14 @@ export function makeDemoState(): DemoState {
         label: 'Moving Head',
         // Fixture "looks" (role→value), compiled to absolute channels via the
         // ADJ Focus Spot profile (PAN=1, TILT=2, COLOR_WHEEL=3, GOBO=4,
-        // SHUTTER=9, DIMMER=10). The Master/remote just apply `levels`.
+        // SHUTTER=9, DIMMER=10). COLOR_WHEEL/GOBO_WHEEL values are real wheel
+        // slots (Blue=29, Yellow=57, Gobo 4=37). The Master/remote just apply
+        // `levels`.
         clips: [
           clip('c-dmx-wash', 1_500, 6_500, 'dmx', {
             universe: 0, fadeMs: 1500,
-            look: { DIMMER: 180, PAN: 60, TILT: 120, COLOR_WHEEL: 20, SHUTTER: 255 },
-            levels: [{ channel: 1, value: 60 }, { channel: 2, value: 120 }, { channel: 3, value: 20 }, { channel: 9, value: 255 }, { channel: 10, value: 180 }],
+            look: { DIMMER: 180, PAN: 60, TILT: 120, COLOR_WHEEL: 29, SHUTTER: 255 },
+            levels: [{ channel: 1, value: 60 }, { channel: 2, value: 120 }, { channel: 3, value: 29 }, { channel: 9, value: 255 }, { channel: 10, value: 180 }],
           }),
           clip('c-dmx-strobe', 9_000, 1_200, 'dmx', {
             universe: 0, fadeMs: 0,
@@ -200,8 +202,8 @@ export function makeDemoState(): DemoState {
           }),
           clip('c-dmx-sweep', 15_000, 8_000, 'dmx', {
             universe: 0, fadeMs: 900,
-            look: { DIMMER: 200, PAN: 200, TILT: 80, COLOR_WHEEL: 60, GOBO_WHEEL: 40, SHUTTER: 255 },
-            levels: [{ channel: 1, value: 200 }, { channel: 2, value: 80 }, { channel: 3, value: 60 }, { channel: 4, value: 40 }, { channel: 9, value: 255 }, { channel: 10, value: 200 }],
+            look: { DIMMER: 200, PAN: 200, TILT: 80, COLOR_WHEEL: 57, GOBO_WHEEL: 37, SHUTTER: 255 },
+            levels: [{ channel: 1, value: 200 }, { channel: 2, value: 80 }, { channel: 3, value: 57 }, { channel: 4, value: 37 }, { channel: 9, value: 255 }, { channel: 10, value: 200 }],
           }),
         ],
       },
