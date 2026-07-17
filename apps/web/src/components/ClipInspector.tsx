@@ -301,38 +301,25 @@ function ClipFields({
 
       {isDmx && !(profile && fixture) && (
         <>
-          <SectionDivider>DMX</SectionDivider>
           {fixture && !profile && (
             <p className="mb-2 text-[11px] text-muted">
               Loading fixture profile… raw channels below work meanwhile.
             </p>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            <NumberField
-              label="Universe"
-              value={String(data.universe ?? 0)}
-              onChange={(v) => patchData({ universe: parseInt(v) || 0 })}
-              onCommit={() => commit()}
-            />
-            <NumberField
-              label="Channel"
-              value={String(data.channel ?? 1)}
-              onChange={(v) => patchData({ channel: clampInt(v, 1, 512) })}
-              onCommit={() => commit()}
-            />
-            <NumberField
-              label="Value (0–255)"
-              value={String(data.value ?? 0)}
-              onChange={(v) => patchData({ value: clampInt(v, 0, 255) })}
-              onCommit={() => commit()}
-            />
-            <NumberField
-              label="Fade (ms)"
-              value={String(data.fadeMs ?? 0)}
-              onChange={(v) => patchData({ fadeMs: Math.max(0, parseInt(v) || 0) })}
-              onCommit={() => commit()}
-            />
-          </div>
+          <DmxRawEditor
+            key={clip.id}
+            universe={typeof data.universe === 'number' ? data.universe : 0}
+            fadeMs={typeof data.fadeMs === 'number' ? data.fadeMs : 0}
+            levels={readDmxLevels(data)}
+            onCommit={(next) => {
+              // Write the multi-channel form and drop the legacy single-channel
+              // fields so the two can never disagree.
+              const nextData = { ...draft.data } as Record<string, unknown>;
+              delete nextData.channel;
+              delete nextData.value;
+              onChange({ ...draft, data: { ...nextData, ...next } });
+            }}
+          />
         </>
       )}
 
@@ -865,6 +852,154 @@ function LookEditor({
           </button>
         )}
       </div>
+    </>
+  );
+}
+
+/** A DMX level: an absolute channel (1..512) and its value (0..255). */
+interface DmxLevel {
+  channel: number;
+  value: number;
+}
+
+/** Read a raw DMX clip's channels from `levels[]`, falling back to the legacy
+ *  single `{channel,value}` shape so old clips migrate seamlessly on edit. */
+function readDmxLevels(data: Record<string, unknown>): DmxLevel[] {
+  if (Array.isArray(data.levels)) {
+    return (data.levels as unknown[])
+      .filter((l): l is DmxLevel => !!l && typeof l === 'object' && 'channel' in l)
+      .map((l) => ({ channel: Number(l.channel) || 0, value: Number(l.value) || 0 }));
+  }
+  if (typeof data.channel === 'number') {
+    return [{ channel: data.channel, value: typeof data.value === 'number' ? data.value : 0 }];
+  }
+  return [];
+}
+
+/**
+ * The manual/raw DMX editor for a device with no fixture profile patched — set
+ * any number of arbitrary channels to values in one clip (writes `levels[]`,
+ * the same wire format the fixture look editor compiles to). This is the
+ * "poke whatever gear I plugged in" path. Universe 0 = the Master's onboard
+ * RS-485 port; 1+ addresses a VoxDMX remote (each remote owns its own universe).
+ */
+function DmxRawEditor({
+  universe: universe0,
+  fadeMs: fadeMs0,
+  levels: levels0,
+  onCommit,
+}: {
+  universe: number;
+  fadeMs: number;
+  levels: DmxLevel[];
+  onCommit: (next: { universe: number; fadeMs: number; levels: DmxLevel[] }) => void;
+}) {
+  const [rows, setRows] = useState<DmxLevel[]>(levels0.length ? levels0 : [{ channel: 1, value: 255 }]);
+  const [universe, setUniverse] = useState(universe0);
+  const [fadeMs, setFadeMs] = useState(fadeMs0);
+
+  /** Commit sanitized state: valid channels only, sorted by channel. */
+  const commit = (nextRows: DmxLevel[], uni = universe, fade = fadeMs) => {
+    const levels = nextRows
+      .filter((r) => r.channel >= 1 && r.channel <= 512)
+      .map((r) => ({ channel: r.channel, value: Math.max(0, Math.min(255, r.value | 0)) }))
+      .sort((a, b) => a.channel - b.channel);
+    onCommit({ universe: Math.max(0, uni | 0), fadeMs: Math.max(0, fade | 0), levels });
+  };
+
+  const setRow = (i: number, patch: Partial<DmxLevel>) => {
+    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  };
+  const addRow = () => {
+    const used = new Set(rows.map((r) => r.channel));
+    let next = 1;
+    while (used.has(next) && next < 512) next++;
+    const nextRows = [...rows, { channel: next, value: 255 }];
+    setRows(nextRows);
+    commit(nextRows);
+  };
+  const removeRow = (i: number) => {
+    const nextRows = rows.filter((_, j) => j !== i);
+    setRows(nextRows);
+    commit(nextRows);
+  };
+
+  return (
+    <>
+      <SectionDivider>DMX · manual channels</SectionDivider>
+      <div className="grid grid-cols-2 gap-2">
+        <NumberField
+          label="Universe"
+          value={String(universe)}
+          onChange={(v) => setUniverse(Math.max(0, parseInt(v) || 0))}
+          onCommit={() => commit(rows)}
+        />
+        <NumberField
+          label="Fade (ms)"
+          value={String(fadeMs)}
+          onChange={(v) => setFadeMs(Math.max(0, parseInt(v) || 0))}
+          onCommit={() => commit(rows)}
+        />
+      </div>
+
+      <div className="mt-3 space-y-1.5">
+        <FieldLabel>Channels</FieldLabel>
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={512}
+              aria-label="channel"
+              value={String(r.channel)}
+              onChange={(e) => setRow(i, { channel: clampInt(e.target.value, 1, 512) })}
+              onBlur={() => commit(rows)}
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+              className="w-16 rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 font-mono text-xs text-text focus:border-purple/50 focus:outline-none"
+            />
+            <span className="text-[11px] text-muted">→</span>
+            <input
+              type="number"
+              min={0}
+              max={255}
+              aria-label="value"
+              value={String(r.value)}
+              onChange={(e) => setRow(i, { value: clampInt(e.target.value, 0, 255) })}
+              onBlur={() => commit(rows)}
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+              className="w-16 rounded-lg border border-border/80 bg-bg/60 px-2.5 py-2 font-mono text-xs text-text focus:border-purple/50 focus:outline-none"
+            />
+            <input
+              type="range"
+              min={0}
+              max={255}
+              aria-label="value slider"
+              value={r.value}
+              onChange={(e) => setRow(i, { value: Number(e.target.value) })}
+              onPointerUp={() => commit(rows)}
+              onKeyUp={() => commit(rows)}
+              className="vox-range h-1.5 flex-1"
+            />
+            <button
+              onClick={() => removeRow(i)}
+              title="Remove channel"
+              className="rounded-md border border-border bg-bg3/40 px-2 py-1.5 text-[11px] text-muted transition-colors hover:text-[#E8623D]"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={addRow}
+          className="mt-1 rounded-md border border-border bg-bg3/40 px-2.5 py-1.5 text-[11px] text-muted transition-colors hover:text-text"
+        >
+          + Add channel
+        </button>
+      </div>
+      <p className="mt-2 text-[10px] leading-relaxed text-muted">
+        Universe <span className="text-text">0</span> is the Master&rsquo;s onboard DMX port;{' '}
+        <span className="text-text">1+</span> addresses a VoxDMX remote (each remote is its own universe).
+      </p>
     </>
   );
 }
