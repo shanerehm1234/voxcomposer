@@ -138,13 +138,18 @@ export function animatedEyeNames(eyeFiles: string[]): string[] {
  * crc-checked `POST /api/upload` bridge the audio sync uses). The RP2040 picks
  * it up on the next SD rescan and lists it as a selectable animated eye.
  */
-export async function uploadDeviceEye(deviceIp: string, name: string, gif: ArrayBuffer): Promise<void> {
+export async function uploadDeviceEye(
+  deviceIp: string,
+  name: string,
+  gif: ArrayBuffer | Uint8Array<ArrayBuffer>,
+): Promise<void> {
   const base = name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]/g, '_') || 'eye';
-  const crc = crc32(new Uint8Array(gif));
+  const u8: Uint8Array<ArrayBuffer> = gif instanceof Uint8Array ? gif : new Uint8Array(gif);
+  const crc = crc32(u8);
   const path = encodeURIComponent(`/eyes/${base}.gif`);
   const res = await fetch(`http://${deviceIp}/api/upload?path=${path}&crc=${crc}`, {
     method: 'POST',
-    body: gif,
+    body: u8,
   });
   if (!res.ok) throw new Error(`uploading ${base}.gif failed: HTTP ${res.status}`);
 }
