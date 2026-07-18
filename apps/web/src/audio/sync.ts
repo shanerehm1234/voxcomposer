@@ -112,6 +112,19 @@ export async function fetchDeviceEyes(deviceIp: string): Promise<string[]> {
   return (j.files ?? []).map((f) => f.n);
 }
 
+/** The skull decoder's hard cap — a GIF eye must be no larger than this on
+ *  either axis (the 240x240 round LCD / the 128KB decode canvas). */
+export const MAX_EYE_GIF_DIM = 240;
+
+/** Read a GIF's logical-screen size from its header (bytes 6-9, little-endian)
+ *  without decoding it. Returns null if the bytes aren't a GIF. */
+export function gifDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 10) return null;
+  const sig = String.fromCharCode(...bytes.slice(0, 6));
+  if (sig !== 'GIF87a' && sig !== 'GIF89a') return null;
+  return { width: bytes[6]! | (bytes[7]! << 8), height: bytes[8]! | (bytes[9]! << 8) };
+}
+
 /** The animated (`.gif`) eye names on a device, without extension — these match
  *  the names the eye clip picker and the skull's inventory use. */
 export function animatedEyeNames(eyeFiles: string[]): string[] {

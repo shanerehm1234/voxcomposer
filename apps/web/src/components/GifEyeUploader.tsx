@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { triggerDeviceRescan, uploadDeviceEye } from '../audio/sync.js';
+import {
+  MAX_EYE_GIF_DIM,
+  gifDimensions,
+  triggerDeviceRescan,
+  uploadDeviceEye,
+} from '../audio/sync.js';
 
 interface GifEyeUploaderProps {
   /** The skull's LAN IP (from the Master's /status). Absent = can't upload. */
@@ -19,20 +24,34 @@ export function GifEyeUploader({ deviceIp, deviceName, onUploaded }: GifEyeUploa
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState('');
   const [status, setStatus] = useState('');
+  const [dims, setDims] = useState<{ width: number; height: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Revoke the object URL when it changes / unmounts (no leaked blobs).
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
-  const pick = (f: File | null) => {
+  const tooBig = !!dims && (dims.width > MAX_EYE_GIF_DIM || dims.height > MAX_EYE_GIF_DIM);
+
+  const pick = async (f: File | null) => {
     setStatus('');
     setFile(f);
     setPreview((old) => { if (old) URL.revokeObjectURL(old); return f ? URL.createObjectURL(f) : ''; });
+    if (!f) { setDims(null); return; }
+    // Read just the header to catch oversized GIFs before uploading a dud the
+    // skull would silently reject.
+    const head = new Uint8Array(await f.slice(0, 10).arrayBuffer());
+    const d = gifDimensions(head);
+    setDims(d);
+    if (d && (d.width > MAX_EYE_GIF_DIM || d.height > MAX_EYE_GIF_DIM)) {
+      setStatus(`${d.width}×${d.height} is too big — resize to ${MAX_EYE_GIF_DIM}×${MAX_EYE_GIF_DIM} or smaller.`);
+    } else if (!d) {
+      setStatus('That doesn’t look like a GIF.');
+    }
   };
 
   const upload = async () => {
-    if (!file || !deviceIp) return;
+    if (!file || !deviceIp || tooBig) return;
     setBusy(true);
     setStatus('uploading…');
     try {
@@ -65,7 +84,9 @@ export function GifEyeUploader({ deviceIp, deviceName, onUploaded }: GifEyeUploa
         <div className="min-w-0 flex-1">
           <div className="text-[12px] font-medium text-text">Animated eye (.gif)</div>
           <div className="truncate text-[11px] text-muted">
-            {file ? name : 'Flame, sparkle, flag — plays where the eyeball goes.'}
+            {file
+              ? `${name}${dims ? ` · ${dims.width}×${dims.height}` : ''}`
+              : 'Flame, sparkle, flag — plays where the eyeball goes.'}
           </div>
         </div>
       </div>
@@ -75,7 +96,7 @@ export function GifEyeUploader({ deviceIp, deviceName, onUploaded }: GifEyeUploa
         type="file"
         accept="image/gif,.gif"
         className="hidden"
-        onChange={(e) => pick(e.target.files?.[0] ?? null)}
+        onChange={(e) => void pick(e.target.files?.[0] ?? null)}
       />
       <div className="mt-2 flex items-center gap-2">
         <button
@@ -86,7 +107,7 @@ export function GifEyeUploader({ deviceIp, deviceName, onUploaded }: GifEyeUploa
         </button>
         <button
           onClick={() => void upload()}
-          disabled={!file || !deviceIp || busy}
+          disabled={!file || !deviceIp || busy || tooBig}
           className="rounded-md border border-purple/40 bg-purple/15 px-2.5 py-1.5 text-[11px] font-medium text-purple-l transition-colors hover:bg-purple/25 disabled:opacity-40"
         >
           {busy ? 'Uploading…' : `Upload to ${deviceName}`}
