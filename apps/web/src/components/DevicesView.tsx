@@ -8,6 +8,7 @@ import { openExternal } from '../openExternal.js';
 import { masterWsUrl, scanForDevices, type DiscoveredDevice } from '../voxlink/client.js';
 import { getMasterConfig, masterHttpBase } from '../voxlink/master.js';
 import { AddDeviceModal } from './AddDeviceModal.js';
+import { GifEyeUploader } from './GifEyeUploader.js';
 import {
   IconBattery,
   IconCheck,
@@ -263,6 +264,7 @@ function DeviceCard({ device: d, onConfigure }: { device: DemoDevice; onConfigur
   const accent = DEVICE_ACCENT[d.type] ?? PALETTE.muted;
   const Icon = resolveDeviceIcon(d.type, d.iconHint);
   const online = d.connection === 'online';
+  const [eyeOpen, setEyeOpen] = useState(false);
 
   return (
     <div
@@ -362,11 +364,20 @@ function DeviceCard({ device: d, onConfigure }: { device: DemoDevice; onConfigur
         </div>
       )}
 
+      {d.type === 'skull' && eyeOpen && (
+        <GifEyeUploader deviceIp={d.ip} deviceName={d.name} />
+      )}
+
       <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3">
         <span className="text-[11px] text-muted">
           {online ? d.firmware : `Last seen ${d.lastSeen ?? 'unknown'}`}
         </span>
         <div className="flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+          {d.type === 'skull' && (
+            <CardAction onClick={() => setEyeOpen((v) => !v)}>
+              {eyeOpen ? 'Close eye' : '✦ Animated eye'}
+            </CardAction>
+          )}
           {d.ip && (
             <CardAction onClick={() => openExternal(`http://${d.ip}`)}>Web UI ↗</CardAction>
           )}

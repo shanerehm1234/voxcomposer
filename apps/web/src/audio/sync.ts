@@ -97,6 +97,46 @@ export async function uploadDeviceAudio(deviceIp: string, name: string, wav: Arr
 }
 
 /**
+ * List the `/eyes` directory on an OcularVox's SD, returning full filenames
+ * (with extensions) so the caller can tell animated `.gif` eyes from procedural
+ * `.eye` sets — the device inventory only carries basenames. Same C3 endpoint
+ * the audio list uses.
+ */
+export async function fetchDeviceEyes(deviceIp: string): Promise<string[]> {
+  const res = await fetch(`http://${deviceIp}/api/files`, {
+    method: 'POST',
+    body: JSON.stringify({ dir: '/eyes' }),
+  });
+  if (!res.ok) throw new Error(`listing /eyes failed: HTTP ${res.status}`);
+  const j = (await res.json()) as { files?: { n: string }[] };
+  return (j.files ?? []).map((f) => f.n);
+}
+
+/** The animated (`.gif`) eye names on a device, without extension — these match
+ *  the names the eye clip picker and the skull's inventory use. */
+export function animatedEyeNames(eyeFiles: string[]): string[] {
+  return eyeFiles
+    .filter((n) => /\.gif$/i.test(n))
+    .map((n) => n.replace(/\.[^.]+$/, ''));
+}
+
+/**
+ * Upload an animated eye `.gif` to `/eyes/<name>.gif` on a device (the same
+ * crc-checked `POST /api/upload` bridge the audio sync uses). The RP2040 picks
+ * it up on the next SD rescan and lists it as a selectable animated eye.
+ */
+export async function uploadDeviceEye(deviceIp: string, name: string, gif: ArrayBuffer): Promise<void> {
+  const base = name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]/g, '_') || 'eye';
+  const crc = crc32(new Uint8Array(gif));
+  const path = encodeURIComponent(`/eyes/${base}.gif`);
+  const res = await fetch(`http://${deviceIp}/api/upload?path=${path}&crc=${crc}`, {
+    method: 'POST',
+    body: gif,
+  });
+  if (!res.ok) throw new Error(`uploading ${base}.gif failed: HTTP ${res.status}`);
+}
+
+/**
  * Ask the device to re-index its SD card (OcularVox `rescan` command) after an
  * upload, so newly-pushed files show on the OLED browser without a reboot.
  * Best-effort — playback + the file list already read the card live.
