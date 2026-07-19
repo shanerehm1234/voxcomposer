@@ -15,21 +15,21 @@ portal, and friends to show where an eyeball would normally be.
 | `hypno.gif` | Rotating hypnotic spiral |
 | `radar.gif` | Green sci-fi radar sweep with blips |
 
-All are **240×240** (the round LCD size), palette-optimized, seamless loops
+All are **232×232** (the round LCD size), palette-optimized, seamless loops
 where it matters, and verified to decode pixel-perfect through the skull's own
 GIF decoder.
 
 ## Using them
 
 - **From Vox Composer:** open a skull's card in **Devices → ✦ Animated eye**,
-  drop a GIF (any size — it auto-fits 240×240 and re-encodes), and upload. It
+  drop a GIF (any size — it auto-fits 232×232 and re-encodes), and upload. It
   lands in the skull's SD `/eyes/` and shows up as a selectable eye by name.
 - **By hand:** copy a `.gif` into `/eyes/` on the skull's SD card. It registers
   on the next scan and selects by its filename (e.g. `flame.gif` → "flame").
 
 ## Limits (the skull's decoder)
 
-- **≤ 240×240** (bigger is rejected — the Composer auto-downscales for you).
+- **≤ 232×232** (bigger is rejected — the Composer auto-downscales for you).
 - ≤ 256 colours/frame (GIF native); keep files under ~1 MB so they stream
   smoothly off the SD card.
 - Disposal 0/1/2 fully supported; mode 3 falls back to mode 2.

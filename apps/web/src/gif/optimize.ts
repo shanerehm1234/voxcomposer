@@ -11,7 +11,7 @@ import { decodeGif } from './decode.js';
 import { encodeGif } from './encode.js';
 import { quantizeFrames } from './quantize.js';
 
-export const EYE_MAX_DIM = 240;
+export const EYE_MAX_DIM = 232;
 const MAX_FRAMES = 48; // keep files streamable off the skull's SD
 
 export interface OptimizedGif {

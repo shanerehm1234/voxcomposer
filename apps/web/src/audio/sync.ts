@@ -113,8 +113,9 @@ export async function fetchDeviceEyes(deviceIp: string): Promise<string[]> {
 }
 
 /** The skull decoder's hard cap — a GIF eye must be no larger than this on
- *  either axis (the 240x240 round LCD / the 128KB decode canvas). */
-export const MAX_EYE_GIF_DIM = 240;
+ *  either axis. 232 (not the 240 panel) so the decode canvas + LZW tables fit
+ *  the RP2040's 128KB eye cache; the skull upscales 232->240 on the round LCD. */
+export const MAX_EYE_GIF_DIM = 232;
 
 /** Read a GIF's logical-screen size from its header (bytes 6-9, little-endian)
  *  without decoding it. Returns null if the bytes aren't a GIF. */
