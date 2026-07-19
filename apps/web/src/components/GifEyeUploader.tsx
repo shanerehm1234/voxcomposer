@@ -91,14 +91,17 @@ export function GifEyeUploader({ deviceIp, deviceName, onUploaded }: GifEyeUploa
   };
 
   const onDrop = (e: React.DragEvent) => {
+    // Stop the app's global window drop handler (audio/.vox import) from also
+    // grabbing the GIF and firing a "can't import" error.
     e.preventDefault();
+    e.stopPropagation();
     setDragOver(false);
     void accept(e.dataTransfer.files?.[0] ?? null);
   };
 
   return (
     <div
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={onDrop}
       className={`mt-2.5 rounded-lg border border-dashed p-2.5 transition-colors ${

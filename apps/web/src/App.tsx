@@ -256,6 +256,7 @@ export function App() {
   const handleAddDevice = useCallback(
     (device: VoxDevice) => {
       const isNew = !show.devices.some((d) => d.id === device.id);
+      dismissedRef.current.delete(device.id); // re-adding clears the "removed this session" flag
       commit(addDevice(show, device));
       setSelectedDeviceId(device.id);
       showToast(isNew ? `Added “${device.name}”` : `Updated “${device.name}”`, 'success');
