@@ -43,6 +43,8 @@ verified to decode pixel-perfect through the skull's own GIF decoder.
 
 - **≤ 232×232** (the standard across all OcularVox models — the Composer
   auto-downscales for you; the skull upscales to the 240 panel).
+- **Up to 32 eyes total** in the menu — 9 built-in + up to 23 of your own
+  (GIFs and/or custom `.eye` files, combined). Listed alphabetically by name.
 - ≤ 256 colours/frame (GIF native); keep files under ~1 MB so they stream
   smoothly off the SD card.
 - Disposal 0/1/2 fully supported; mode 3 falls back to mode 2.
